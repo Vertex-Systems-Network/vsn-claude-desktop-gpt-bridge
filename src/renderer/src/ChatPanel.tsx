@@ -6,7 +6,7 @@ import type { ChatSnapshot } from '../../shared/chat'
 export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
   const bridge = window.deskAgent
   const [chat, setChat] = useState<ChatSnapshot>({ models: [], turns: [], busy: false })
-  const [pending, setPending] = useState<'models' | 'send' | 'clear'>()
+  const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open'>()
   const [model, setModel] = useState('')
   const [prompt, setPrompt] = useState('')
   const [notice, setNotice] = useState('')
@@ -27,7 +27,7 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
     return () => { active = false; clearInterval(timer) }
   }, [bridge, pending])
 
-  async function run(operation: 'models' | 'send' | 'clear', action: () => Promise<ChatSnapshot>) {
+  async function run(operation: 'models' | 'send' | 'clear' | 'open', action: () => Promise<ChatSnapshot>) {
     if (busy) return
     setPending(operation)
     setNotice('')
@@ -53,11 +53,20 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="chat-heading" className="text-2xl font-semibold">Chat workspace</h2>
         <button type="button" disabled={busy || !chat.turns.length} onClick={() => {
-          if (window.confirm('Clear this chat? Messages in this workspace are kept only for this session.')) {
-            void run('clear', bridge.clearChat)
-          }
+          void run('clear', bridge.clearChat)
         }}>New chat</button>
       </div>
+      {!!chat.saved?.length && (
+        <label className="mt-4 grid gap-2">
+          Recent chats
+          <select className="rounded border bg-transparent p-2" value={chat.conversation ?? ''} disabled={busy}
+            onChange={(event) => { const id = event.target.value; void run('open', () => bridge.openChat(id)) }}>
+            <option value="" disabled>Choose a saved chat</option>
+            {chat.saved.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+          </select>
+        </label>
+      )}
+      {chat.historyError && <p className="mt-4" role="alert">{chat.historyError}</p>}
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="grid min-w-52 gap-2">
           Model

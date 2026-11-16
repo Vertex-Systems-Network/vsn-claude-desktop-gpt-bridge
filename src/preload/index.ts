@@ -14,6 +14,7 @@ const bridge: DesktopBridge = {
   loadChatModels: () => ipcRenderer.invoke(chatChannels.models),
   sendChat: (model, prompt) => ipcRenderer.invoke(chatChannels.send, model, prompt),
   stopChat: () => ipcRenderer.invoke(chatChannels.stop),
+  openChat: (id) => ipcRenderer.invoke(chatChannels.open, id),
   clearChat: () => ipcRenderer.invoke(chatChannels.clear),
   async getRuntimeInfo() {
     return ipcRenderer.invoke(runtimeChannel)

@@ -229,6 +229,10 @@ export class AccountService {
     }
   }
 
+  historyAccount(): string | undefined {
+    return this.record?.tokens ? this.record.clientId : undefined
+  }
+
   async chatAccessToken(): Promise<string> {
     let tokens = this.record?.tokens
     if (this.status.busy || !tokens || !hasPlanGrant(tokens.scopes, tokens.refresh) ||

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { accountChannels, chatChannels, runtimeChannel } from '../shared/channel'
 import { maxPromptLength } from '../shared/chat'
+import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
@@ -56,7 +57,27 @@ function handleRequest(channel: string, handler: (...args: unknown[]) => unknown
 async function start() {
   const account = new AccountService(new AccountStore(join(app.getPath('userData'), 'auth')))
   if (!smoke) await account.initialize()
-  const chat = new ChatService(() => account.chatAccessToken())
+  let history: ChatHistory | undefined
+  try {
+    history = new ChatHistory(smoke ? ':memory:' : join(app.getPath('userData'), 'chat.sqlite3'))
+  } catch (error) {
+    if (smoke) throw error
+    console.error('DeskAgent could not open local chat history.', error instanceof Error ? error.name : 'Unknown error')
+  }
+  const chat = new ChatService(() => account.chatAccessToken(), history, () => account.historyAccount())
+  if (smoke && history) {
+    const id = history.append('smoke-profile', undefined, 0, 'smoke-model', 'smoke prompt')
+    history.update('smoke-profile', id, 0, { prompt: 'smoke prompt', reply: 'smoke reply', phase: 'complete' })
+    if (history.read('smoke-profile', id)?.[0]?.reply !== 'smoke reply' || history.read('other-profile', id)) {
+      throw new Error('DeskAgent SQLite history smoke failed')
+    }
+  }
+  handleRequest(chatChannels.open, (id) => {
+    if (typeof id !== 'string' || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/.test(id)) {
+      throw new Error('Invalid conversation identifier')
+    }
+    return chat.open(id)
+  }, 1)
   handleRequest(chatChannels.status, () => chat.snapshot())
   handleRequest(chatChannels.models, () => chat.loadModels())
   handleRequest(chatChannels.stop, () => chat.stop())
@@ -76,7 +97,6 @@ async function start() {
   handleRequest(accountChannels.refresh, () => chat.busy ? account.getStatus() : account.refresh())
   handleRequest(accountChannels.signOut, () => {
     if (chat.busy || account.getStatus().busy) return account.getStatus()
-    chat.clear(true)
     return account.signOut()
   })
   handleRequest(runtimeChannel, () => runtimeInfo.parse({
@@ -109,7 +129,7 @@ async function start() {
     if (encrypted.includes(Buffer.from(sentinel)) || decryptCredential(encrypted) !== sentinel) {
       throw new Error('DeskAgent Windows credential protection smoke failed')
     }
-    console.log('DeskAgent Windows startup, sandboxed IPC and DPAPI verified')
+    console.log('DeskAgent Windows startup, sandboxed IPC and DPAPI verified; SQLite history verified')
     app.exit(0)
   }
 }

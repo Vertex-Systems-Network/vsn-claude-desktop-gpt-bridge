@@ -14,4 +14,5 @@ export const chatChannels = {
   send: 'deskagent:chat-send',
   stop: 'deskagent:chat-stop',
   clear: 'deskagent:chat-clear',
+  open: 'deskagent:chat-open',
 } as const

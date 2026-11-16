@@ -5,10 +5,14 @@ export type ChatTurn = {
   reply: string
   phase: 'streaming' | 'complete' | 'stopped' | 'failed'
 }
+export type SavedChat = { id: string; title: string }
 export interface ChatSnapshot {
   models: ChatModel[]
   turns: ChatTurn[]
   busy: boolean
+  saved?: SavedChat[]
+  conversation?: string
+  historyError?: string
   error?: string
 }
 export const maxPromptLength = 12_000

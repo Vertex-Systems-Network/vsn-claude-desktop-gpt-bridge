@@ -1,0 +1,76 @@
+import { DatabaseSync } from 'node:sqlite'
+import { randomUUID } from 'node:crypto'
+import type { ChatTurn, SavedChat } from '../../shared/chat'
+
+export class ChatHistory {
+  private readonly db: DatabaseSync
+
+  constructor(path: string) {
+    this.db = new DatabaseSync(path)
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000')
+      const version = Number(this.db.prepare('PRAGMA user_version').get()?.user_version)
+      if (version > 1) throw new Error('Chat database was created by a newer DeskAgent version')
+      if (version === 0) this.db.exec(`
+        BEGIN;
+        CREATE TABLE conversations (
+          id TEXT PRIMARY KEY, account TEXT NOT NULL, title TEXT NOT NULL, updated INTEGER NOT NULL
+        ) STRICT;
+        CREATE INDEX recent_conversations ON conversations(account, updated DESC);
+        CREATE TABLE messages (
+          id INTEGER PRIMARY KEY, conversation TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          position INTEGER NOT NULL, model TEXT NOT NULL, prompt TEXT NOT NULL, reply TEXT NOT NULL,
+          phase TEXT NOT NULL CHECK(phase IN ('streaming', 'complete', 'stopped', 'failed')),
+          UNIQUE(conversation, position)
+        ) STRICT;
+        PRAGMA user_version = 1;
+        COMMIT;
+      `)
+      this.db.exec("UPDATE messages SET phase = 'stopped' WHERE phase = 'streaming'")
+    } catch (error) {
+      this.db.close()
+      throw error
+    }
+  }
+
+  list(account: string): SavedChat[] {
+    return this.db.prepare('SELECT id, title FROM conversations WHERE account = ? ORDER BY updated DESC, rowid DESC LIMIT 100')
+      .all(account) as SavedChat[]
+  }
+
+  read(account: string, id: string): ChatTurn[] | undefined {
+    if (!this.db.prepare('SELECT 1 FROM conversations WHERE account = ? AND id = ?').get(account, id)) return
+    return this.db.prepare('SELECT prompt, reply, phase FROM messages WHERE conversation = ? ORDER BY position').all(id) as ChatTurn[]
+  }
+
+  append(account: string, current: string | undefined, position: number, model: string, prompt: string): string {
+    const id = current ?? randomUUID()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      if (current) {
+        const changed = this.db.prepare('UPDATE conversations SET updated = ? WHERE account = ? AND id = ?').run(Date.now(), account, id)
+        if (!changed.changes) throw new Error('Conversation not found')
+      } else {
+        const title = Array.from(prompt.replace(/\s+/g, ' ')).slice(0, 70).join('')
+        this.db.prepare('INSERT INTO conversations VALUES (?, ?, ?, ?)').run(id, account, title, Date.now())
+      }
+      this.db.prepare("INSERT INTO messages (conversation, position, model, prompt, reply, phase) VALUES (?, ?, ?, ?, '', 'streaming')")
+        .run(id, position, model, prompt)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    return id
+  }
+
+  update(account: string, id: string, position: number, turn: ChatTurn): void {
+    const changed = this.db.prepare(`
+      UPDATE messages SET reply = ?, phase = ? WHERE conversation = ? AND position = ?
+      AND EXISTS (SELECT 1 FROM conversations WHERE id = ? AND account = ?)
+    `).run(turn.reply, turn.phase, id, position, id, account)
+    if (!changed.changes) throw new Error('Message not found')
+  }
+
+  close(): void { this.db.close() }
+}

@@ -1,6 +1,6 @@
 # DeskAgent
 
-A Windows desktop workspace in development. The current build includes the Windows account panel, explicit ChatGPT plan verification, runtime diagnostics and appearance controls. The chat workspace supports model selection and streamed text. Chat messages are kept in memory until the desktop app closes or you choose **New chat**.
+A Windows desktop workspace in development. The current build includes the Windows account panel, explicit ChatGPT plan verification, runtime diagnostics and appearance controls. The chat workspace supports model selection and streamed text. Chat messages are saved in a local SQLite file under the Windows app data directory. Sign in to the same account registration to reopen recent chats. Local history is stored as readable SQLite text and does not sync to ChatGPT history.
 
 ## Development
 

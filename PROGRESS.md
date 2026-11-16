@@ -9,3 +9,5 @@ The account panel and documented direct SIWC authorization flow now have impleme
 Account settings also include a user-initiated session renewal path with protected token rotation and interactive reconnect after terminal refresh errors.
 
 The account panel can request the live visible-model list and verify plan access through a completed Responses stream. The chat workspace adds account-specific model selection, multi-turn text requests, live partial replies, cancellation, and session-only messages. Persistent history and live account testing remain pending.
+
+Phase 4 adds versioned local SQLite history, recent-chat selection, account scoping, and recovery of interrupted replies. Search, rename/archive/delete, export and temporary chat mode remain pending.

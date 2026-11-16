@@ -22,6 +22,7 @@ export interface DesktopBridge {
   loadChatModels(): Promise<ChatSnapshot>
   sendChat(model: string, prompt: string): Promise<ChatSnapshot>
   stopChat(): Promise<void>
+  openChat(id: string): Promise<ChatSnapshot>
   clearChat(): Promise<ChatSnapshot>
   getRuntimeInfo(): Promise<RuntimeInfo>
 }
