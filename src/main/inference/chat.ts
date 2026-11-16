@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSnapshot, ChatTurn } from '../../shared/chat'
+import type { ChatMessage, ChatSnapshot, ChatTurn, SavedChat } from '../../shared/chat'
 import type { ChatHistory } from '../storage/history'
 import { fetchModels, PlanCheckError, streamText } from './plan-check'
 
@@ -71,6 +71,19 @@ export class ChatService {
     } catch {
       this.historyError = 'Local chat history could not be opened. Check storage and restart DeskAgent.'
     }
+  }
+
+  find(query: string): SavedChat[] {
+    this.syncHistory()
+    if (!this.scope || !this.history || this.running) return []
+    return this.history.search(this.scope, query)
+  }
+
+  exportConversation(): { title: string; turns: ChatTurn[] } | undefined {
+    this.syncHistory()
+    if (!this.scope || !this.history || !this.conversation || this.running) return
+    const title = this.saved?.find(({ id }) => id === this.conversation)?.title ?? 'DeskAgent chat'
+    return { title, turns: this.turns.map((turn) => ({ ...turn })) }
   }
 
   open(id: string): ChatSnapshot {

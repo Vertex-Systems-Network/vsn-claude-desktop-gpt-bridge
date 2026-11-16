@@ -38,6 +38,17 @@ export class ChatHistory {
       .all(account) as SavedChat[]
   }
 
+  search(account: string, query: string): SavedChat[] {
+    return this.db.prepare(`
+      SELECT c.id, c.title FROM conversations c WHERE c.account = ? AND (
+        instr(lower(c.title), lower(?)) > 0 OR EXISTS (
+          SELECT 1 FROM messages m WHERE m.conversation = c.id AND
+          (instr(lower(m.prompt), lower(?)) > 0 OR instr(lower(m.reply), lower(?)) > 0)
+        )
+      ) ORDER BY c.updated DESC, c.rowid DESC LIMIT 100
+    `).all(account, query, query, query) as SavedChat[]
+  }
+
   read(account: string, id: string): ChatTurn[] | undefined {
     if (!this.db.prepare('SELECT 1 FROM conversations WHERE account = ? AND id = ?').get(account, id)) return
     return this.db.prepare('SELECT prompt, reply, phase FROM messages WHERE conversation = ? ORDER BY position').all(id) as ChatTurn[]

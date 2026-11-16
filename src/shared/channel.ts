@@ -15,4 +15,6 @@ export const chatChannels = {
   stop: 'deskagent:chat-stop',
   clear: 'deskagent:chat-clear',
   open: 'deskagent:chat-open',
+  search: 'deskagent:chat-search',
+  export: 'deskagent:chat-export',
 } as const

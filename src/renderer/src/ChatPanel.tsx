@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { maxPromptLength } from '../../shared/chat'
-import type { ChatSnapshot } from '../../shared/chat'
+import type { ChatSnapshot, SavedChat } from '../../shared/chat'
 
 export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
   const bridge = window.deskAgent
@@ -9,6 +9,9 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
   const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open'>()
   const [model, setModel] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [query, setQuery] = useState('')
+  const [matches, setMatches] = useState<SavedChat[]>()
+  const [exporting, setExporting] = useState(false)
   const [notice, setNotice] = useState('')
   const selected = chat.models.find((option) => option.slug === model)?.slug ?? ''
   const busy = Boolean(pending || chat.busy)
@@ -43,6 +46,21 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
     }
   }
 
+  async function search(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    try { setMatches(await bridge.searchChats(query)) }
+    catch { setNotice('DeskAgent could not search local history.') }
+  }
+
+  async function exportConversation(format: 'md' | 'json') {
+    setExporting(true)
+    setNotice('')
+    try {
+      if (await bridge.exportChat(format)) setNotice('Conversation exported.')
+    } catch { setNotice('DeskAgent could not save the export file.') }
+    finally { setExporting(false) }
+  }
+
   function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (selected && prompt.trim()) void run('send', () => bridge.sendChat(selected, prompt))
@@ -57,15 +75,30 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
         }}>New chat</button>
       </div>
       {!!chat.saved?.length && (
+        <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={search}>
+          <label className="grid gap-2">
+            Search saved chats
+            <input type="search" maxLength={160} value={query} className="rounded border bg-transparent p-2"
+              onChange={(event) => { setQuery(event.target.value); setMatches(undefined) }} />
+          </label>
+          <button type="submit" disabled={busy || !query.trim()}>Search</button>
+        </form>
+      )}
+      {matches && !matches.length && <p className="mt-3 muted" role="status">No chats matched the search.</p>}
+      {!!chat.saved?.length && (
         <label className="mt-4 grid gap-2">
           Recent chats
-          <select className="rounded border bg-transparent p-2" value={chat.conversation ?? ''} disabled={busy}
+          <select className="rounded border bg-transparent p-2" value={(matches ?? chat.saved).some(({ id }) => id === chat.conversation) ? chat.conversation : ''} disabled={busy}
             onChange={(event) => { const id = event.target.value; void run('open', () => bridge.openChat(id)) }}>
             <option value="" disabled>Choose a saved chat</option>
-            {chat.saved.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+            {(matches ?? chat.saved).map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
           </select>
         </label>
       )}
+      {chat.conversation && <div className="mt-4 flex flex-wrap gap-3">
+        <button type="button" disabled={busy || exporting} onClick={() => { void exportConversation('md') }}>Export Markdown</button>
+        <button type="button" disabled={busy || exporting} onClick={() => { void exportConversation('json') }}>Export JSON</button>
+      </div>}
       {chat.historyError && <p className="mt-4" role="alert">{chat.historyError}</p>}
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="grid min-w-52 gap-2">
@@ -94,7 +127,8 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
           </li>
         ))}
       </ol>
-      {(notice || chat.error) && <p className="mt-4" role="alert">{notice || chat.error}</p>}
+      {notice && <p className="mt-4" role="status">{notice}</p>}
+      {chat.error && <p className="mt-4" role="alert">{chat.error}</p>}
       <form className="mt-5 grid gap-3" onSubmit={send}>
         <label htmlFor="chat-prompt">Message</label>
         <textarea id="chat-prompt" rows={4} className="w-full rounded border bg-transparent p-3"

@@ -1,4 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { writeFile } from 'node:fs/promises'
+import { formatChatExport } from './storage/export'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { accountChannels, chatChannels, runtimeChannel } from '../shared/channel'
@@ -77,6 +79,23 @@ async function start() {
       throw new Error('Invalid conversation identifier')
     }
     return chat.open(id)
+  }, 1)
+  handleRequest(chatChannels.search, (query) => {
+    if (typeof query !== 'string' || query.length > 160) throw new Error('Invalid search query')
+    return chat.find(query.trim())
+  }, 1)
+  handleRequest(chatChannels.export, async (format) => {
+    if (format !== 'md' && format !== 'json') throw new Error('Invalid export format')
+    const conversation = chat.exportConversation()
+    if (!mainWindow || !conversation) return false
+    const selected = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export conversation',
+      defaultPath: 'deskagent-chat.' + format,
+      filters: [{ name: format === 'json' ? 'JSON' : 'Markdown', extensions: [format] }],
+    })
+    if (selected.canceled || !selected.filePath) return false
+    await writeFile(selected.filePath, formatChatExport(conversation, format), 'utf8')
+    return true
   }, 1)
   handleRequest(chatChannels.status, () => chat.snapshot())
   handleRequest(chatChannels.models, () => chat.loadModels())

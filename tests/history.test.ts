@@ -22,6 +22,9 @@ it('restores complete and interrupted replies from a real database after reopeni
     try {
       expect(next.list('profile')).toEqual([{ id, title: 'hello' }])
       expect(next.list('other')).toEqual([])
+      expect(next.search('profile', 'WORLD').map(({ id }) => id)).toEqual([id])
+      expect(next.search('profile', '%')).toEqual([])
+      expect(next.search('other', 'world')).toEqual([])
       expect(next.read('other', id)).toBeUndefined()
       expect(next.read('profile', id)).toEqual([
         { prompt: 'hello', reply: 'world', phase: 'complete' },

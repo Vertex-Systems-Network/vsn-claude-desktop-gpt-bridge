@@ -19,3 +19,5 @@ To try live plan verification, open the app, select **Continue with ChatGPT**, c
 In **Chat workspace**, choose **Load models**, select a model, and send a message. Recent completed turns are included in follow-up requests.
 
 The smoke test launches Electron and verifies the built renderer's connection to the main process and a synthetic Windows credential encryption round trip. Run it in a Windows desktop session. See [feasibility](docs/FEASIBILITY.md), [progress](PROGRESS.md) and the [test report](TEST_REPORT.md).
+
+Use **Search saved chats** to find a conversation by title or message text. Export the open conversation from **Export Markdown** or **Export JSON**. Choose a destination in the Windows save dialog.

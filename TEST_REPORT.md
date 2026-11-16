@@ -13,3 +13,5 @@ The plan-check suite uses test responses for catalog filtering, OAuth request sh
 The [plan verification run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43976218127) passed 18 tests, the production build, and the Windows smoke test. Chat coverage adds completed context, interruption, incremental output, and enforcement of account model selection. Live ChatGPT consent and inference are separate from these fixture tests.
 
 The [streaming chat run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43977310518) passed all 22 tests and the Windows smoke test. Phase 4 adds a file-backed SQLite reopen test and a native SQLite round trip in the Windows smoke test.
+
+The [SQLite reopen run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43978630120) passed lint, type checks, all 23 tests, the production build, and the Windows SQLite/IPC/DPAPI smoke test. The search/export follow-up adds literal search and export-format fixtures.
