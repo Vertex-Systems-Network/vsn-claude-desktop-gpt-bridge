@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { accountChannels, runtimeChannel } from '../shared/channel'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
+
 import { AccountService } from './auth/account'
 import { AccountStore } from './auth/store'
 
@@ -57,11 +58,12 @@ async function start() {
   handleRequest(accountChannels.signIn, () => account.signIn(false))
   handleRequest(accountChannels.consent, () => account.signIn(true))
   handleRequest(accountChannels.cancel, () => account.cancel())
+  handleRequest(accountChannels.refresh, () => account.refresh())
   handleRequest(accountChannels.signOut, () => account.signOut())
   handleRequest(runtimeChannel, () => runtimeInfo.parse({
-    appVersion: app.getVersion(),
-    electronVersion: process.versions.electron,
-    platform: process.platform,
+      appVersion: app.getVersion(),
+      electronVersion: process.versions.electron,
+      platform: process.platform,
   }))
   const window = openWindow()
   await window.loadURL(rendererUrl)
@@ -74,7 +76,7 @@ async function start() {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
         return info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
-          Object.keys(account).every((key) => ['state', 'busy', 'label', 'message', 'code'].includes(key)) &&
+          Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
           document.title === 'DeskAgent' && !!document.querySelector('main h1');
       })()

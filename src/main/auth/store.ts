@@ -10,7 +10,7 @@ const schema = z.strictObject({
   account: z.object({ subject: z.string().min(1), label: z.string().min(1) }).optional(),
   tokens: z.object({
     access: z.string().min(1), refresh: z.string().min(1).optional(), identity: z.string().min(1),
-    expiresAt: z.number(), scopes: z.array(z.string()),
+    expiresAt: z.number(), scopes: z.array(z.string()), needsIdentityVerification: z.boolean().optional(),
   }).optional(),
 })
 export type StoredAccount = z.infer<typeof schema>

@@ -52,6 +52,9 @@ export function AccountPanel() {
         }}>
           {requireConsent ? 'Enable ChatGPT plan usage' : 'Continue with ChatGPT'}
         </button>}
+        {status?.canRefresh && <button type="button" disabled={pending} onClick={() => {
+          void run(bridge.refreshAccount)
+        }}>Check session</button>}
         {status?.label && status.state !== 'SIGNED_OUT' && <button type="button" disabled={pending} onClick={() => {
           void run(bridge.signOut)
         }}>Disconnect</button>}

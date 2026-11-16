@@ -7,6 +7,7 @@ export type AccountState =
 export interface AccountStatus {
   state: AccountState
   busy: boolean
+  canRefresh?: boolean
   label?: string
   message?: string
   code?: string

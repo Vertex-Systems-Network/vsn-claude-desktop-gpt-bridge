@@ -32,6 +32,39 @@ async function discover() {
   }).parse(await response.json())
 }
 
+const refreshResponse = tokenResponse.extend({
+  id_token: z.string().min(1).optional(),
+  refresh_token: z.string().min(1),
+})
+const invalidRefreshCodes = new Set([
+  'invalid_grant', 'invalid_refresh_token', 'token_expired', 'refresh_token_expired',
+  'refresh_token_invalidated', 'refresh_token_reused',
+])
+const exchangeUrl = issuer + '/api/accounts/oauth/token'
+
+async function verifyIdentity(idToken: string, clientId: string, subject?: string, nonce?: string) {
+  const metadata = await discover()
+  const { createRemoteJWKSet, jwtVerify } = await import('jose')
+  const jwks = createRemoteJWKSet(providerUrl(metadata.jwks_uri), { timeoutDuration: 10_000 })
+  const { payload } = await jwtVerify(idToken, jwks, {
+    issuer, audience: clientId, requiredClaims: ['sub', 'exp', 'iat'],
+    clockTolerance: 5,
+    algorithms: metadata.id_token_signing_alg_values_supported?.filter((alg) => /^(RS|PS|ES)\d+$/.test(alg)),
+  })
+  if (!payload.sub || (nonce !== undefined && payload.nonce !== nonce) ||
+    ((payload.azp !== undefined || (Array.isArray(payload.aud) && payload.aud.length > 1)) && payload.azp !== clientId) ||
+    (subject && subject !== payload.sub)) {
+    throw new AuthFailure('AUTH_TOKEN_INVALID', 'The returned identity did not match the saved registration.')
+  }
+  return { subject: payload.sub, label: [payload.email, payload.name].find(
+    (value): value is string => typeof value === 'string' && !!value.trim(),
+  ) }
+}
+
+function grantedScopes(scope: string | undefined, previous: string[] = []): string[] {
+  return scope?.split(/\s+/).filter(Boolean) ?? previous
+}
+
 export class AccountService {
   private record?: StoredAccount
   private status: AccountStatus = { state: 'SIGNED_OUT', busy: false }
@@ -40,13 +73,18 @@ export class AccountService {
   constructor(private readonly store: AccountStore) {}
 
   private set(state: AccountState, busy = false, message?: string, code?: string): AccountStatus {
-    this.status = { state, busy, label: this.record?.account?.label, message, code }
+    const tokens = this.record?.tokens
+    const canRefresh = Boolean(tokens?.refresh && (tokens.needsIdentityVerification || hasPlanGrant(tokens.scopes, tokens.refresh)))
+    this.status = { state, busy, canRefresh, label: this.record?.account?.label, message, code }
     return this.status
   }
 
   private fromRecord(): AccountStatus {
     const tokens = this.record?.tokens
     if (!tokens) return this.set('SIGNED_OUT')
+    if (tokens.needsIdentityVerification) {
+      return this.set('RECONNECT_REQUIRED', false, 'Verify the renewed ChatGPT session before continuing.')
+    }
     if (!hasPlanGrant(tokens.scopes, tokens.refresh)) {
       return this.set('PLAN_PERMISSION_REQUIRED', false, 'Signed in successfully. ChatGPT plan usage has not been enabled.')
     }
@@ -99,7 +137,7 @@ export class AccountService {
         await this.store.save(registered)
         this.record = registered
       }
-      const response = await fetchProvider(issuer + '/api/accounts/oauth/token', {
+      const response = await fetchProvider(exchangeUrl, {
         method: 'POST',
         body: new URLSearchParams({
           grant_type: 'authorization_code', client_id: callback.clientId, code: callback.code,
@@ -110,25 +148,14 @@ export class AccountService {
         throw new AuthFailure('AUTH_TOKEN_EXCHANGE_FAILED', 'OpenAI could not exchange the authorization code. Try signing in again.')
       }
       const tokens = tokenResponse.parse(await response.json())
-      const metadata = await discover()
-      const { createRemoteJWKSet, jwtVerify } = await import('jose')
-      const jwks = createRemoteJWKSet(providerUrl(metadata.jwks_uri), { timeoutDuration: 10_000 })
-      const { payload } = await jwtVerify(tokens.id_token, jwks, {
-        issuer, audience: callback.clientId, requiredClaims: ['sub', 'exp', 'iat', 'nonce'],
-        clockTolerance: 5, algorithms: metadata.id_token_signing_alg_values_supported?.filter((alg) => /^(RS|PS|ES)\d+$/.test(alg)),
-      }).catch(() => { throw new AuthFailure('AUTH_TOKEN_INVALID', 'The OpenAI identity token could not be verified.') })
-      if (!payload.sub || payload.nonce !== attempt.nonce ||
-        ((payload.azp !== undefined || (Array.isArray(payload.aud) && payload.aud.length > 1)) && payload.azp !== callback.clientId) ||
-        (previous.account && previous.account.subject !== payload.sub)) {
-        throw new AuthFailure('AUTH_TOKEN_INVALID', 'The returned identity did not match this sign-in attempt.')
-      }
-      const label = [payload.email, payload.name].find((value): value is string => typeof value === 'string' && !!value.trim()) ?? 'ChatGPT account'
+      const identity = await verifyIdentity(tokens.id_token, callback.clientId, previous.account?.subject, attempt.nonce)
+        .catch(() => { throw new AuthFailure('AUTH_TOKEN_INVALID', 'The OpenAI identity token could not be verified.') })
       const verified: StoredAccount = {
-        ...registered, account: { subject: payload.sub, label },
+        ...registered, account: { subject: identity.subject, label: identity.label ?? 'ChatGPT account' },
         tokens: {
           access: tokens.access_token, refresh: tokens.refresh_token, identity: tokens.id_token,
           expiresAt: Date.now() + tokens.expires_in * 1_000,
-          scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
+          scopes: grantedScopes(tokens.scope),
         },
       }
       await this.store.save(verified)
@@ -146,6 +173,59 @@ export class AccountService {
   cancel(): AccountStatus {
     if (this.status.state === 'WAITING_FOR_CALLBACK') this.cancelCallback?.()
     return this.status
+  }
+
+  async refresh(): Promise<AccountStatus> {
+    const previous = this.record
+    const tokens = previous?.tokens
+    if (this.status.busy || !previous?.clientId || !previous.account ||
+      !tokens?.refresh || (!tokens.needsIdentityVerification && !hasPlanGrant(tokens.scopes, tokens.refresh))) {
+      return this.status
+    }
+    this.set('TOKEN_REFRESHING', true, 'Checking the ChatGPT session…')
+    try {
+      if (!tokens.needsIdentityVerification && tokens.expiresAt > Date.now() + 60_000) return this.fromRecord()
+      let updated = tokens
+      if (!tokens.needsIdentityVerification) {
+        const response = await fetchProvider(exchangeUrl, {
+          method: 'POST',
+          body: new URLSearchParams({
+            grant_type: 'refresh_token', client_id: previous.clientId, refresh_token: tokens.refresh, resource,
+          }),
+        })
+        if (!response.ok) {
+          const body: unknown = await response.json().catch(() => null)
+          const error = z.object({ error: z.union([z.string(), z.object({ code: z.string() })]) }).safeParse(body)
+          const code = error.success && (typeof error.data.error === 'string' ? error.data.error : error.data.error.code)
+          if (code && invalidRefreshCodes.has(code)) {
+            const local = { ...previous, tokens: undefined }
+            await this.store.save(local)
+            this.record = local
+            return this.set('RECONNECT_REQUIRED', false, 'The saved ChatGPT session expired or was revoked. Sign in again.', 'AUTH_REFRESH_FAILED')
+          }
+          throw new AuthFailure('AUTH_REFRESH_FAILED', 'OpenAI could not renew the session. Try again when the service is available.')
+        }
+        const renewed = refreshResponse.parse(await response.json())
+        updated = {
+          access: renewed.access_token, refresh: renewed.refresh_token, identity: renewed.id_token ?? tokens.identity,
+          expiresAt: Date.now() + renewed.expires_in * 1_000,
+          scopes: grantedScopes(renewed.scope, tokens.scopes), needsIdentityVerification: Boolean(renewed.id_token),
+        }
+        // Preserve rotated credentials before any remote signing-key lookup.
+        const next = { ...previous, tokens: updated }
+        this.record = next
+        await this.store.save(next)
+      }
+      if (updated.needsIdentityVerification) {
+        await verifyIdentity(updated.identity, previous.clientId, previous.account.subject)
+        const verified = { ...previous, tokens: { ...updated, needsIdentityVerification: false } }
+        await this.store.save(verified)
+        this.record = verified
+      }
+      return this.fromRecord()
+    } catch (error) {
+      return this.report(error, 'DeskAgent could not verify or save the renewed session. Reconnect if retrying does not help.')
+    }
   }
 
   async signOut(): Promise<AccountStatus> {
