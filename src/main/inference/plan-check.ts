@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ChatMessage } from '../../shared/chat'
 
 const api = 'https://api.openai.com/v1'
 const catalog = z.object({
@@ -24,7 +25,7 @@ export function listVisibleModels(value: unknown) {
   return catalog.parse(value).models.filter((model) => model.visibility === 'list')
 }
 
-export async function readCompletedText(body: ReadableStream<Uint8Array>): Promise<string> {
+export async function readCompletedText(body: ReadableStream<Uint8Array>, onDelta?: (delta: string) => void): Promise<string> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffered = ''
@@ -46,7 +47,10 @@ export async function readCompletedText(body: ReadableStream<Uint8Array>): Promi
           .map((line) => line.slice(5).replace(/^ /, '')).join('\n')
         if (!data || data === '[DONE]') continue
         const event = streamEvent.parse(JSON.parse(data))
-        if (event.type === 'response.output_text.delta') text += event.delta ?? ''
+        if (event.type === 'response.output_text.delta' && event.delta) {
+          text += event.delta
+          onDelta?.(event.delta)
+        }
         if (event.type === 'response.completed') {
           if (!text.trim()) throw new PlanCheckError('INFERENCE_EMPTY_RESPONSE')
           return text
@@ -71,27 +75,39 @@ async function ensureSuccess(response: Response): Promise<void> {
     response.status, id.success ? id.data : undefined)
 }
 
-export async function checkPlan(accessToken: string) {
-  const headers = { Authorization: 'Bearer ' + accessToken }
-  const catalogResponse = await fetch(api + '/models', {
-    headers, redirect: 'error', signal: AbortSignal.timeout(15_000),
+export async function fetchModels(accessToken: string) {
+  const response = await fetch(api + '/models', {
+    headers: { Authorization: 'Bearer ' + accessToken },
+    redirect: 'error', signal: AbortSignal.timeout(15_000),
   })
-  await ensureSuccess(catalogResponse)
-  const [model] = listVisibleModels(await catalogResponse.json())
-  if (!model) throw new PlanCheckError('MODEL_UNAVAILABLE')
+  await ensureSuccess(response)
+  return listVisibleModels(await response.json())
+}
 
+export async function streamText(
+  accessToken: string,
+  model: string,
+  input: ChatMessage[],
+  onDelta?: (delta: string) => void,
+  cancel?: AbortSignal,
+): Promise<string> {
+  const timeout = AbortSignal.timeout(120_000)
   const response = await fetch(api + '/responses', {
-    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-    redirect: 'error', signal: AbortSignal.timeout(45_000),
-    body: JSON.stringify({
-      model: model.slug, store: false, stream: true,
-      input: [{ role: 'user', content: 'Reply with one word: Ready.' }],
-    }),
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    redirect: 'error', signal: cancel ? AbortSignal.any([cancel, timeout]) : timeout,
+    body: JSON.stringify({ model, store: false, stream: true, input }),
   })
   await ensureSuccess(response)
   if (!response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {
     throw new PlanCheckError('INFERENCE_INVALID_RESPONSE')
   }
-  await readCompletedText(response.body)
+  return readCompletedText(response.body, onDelta)
+}
+
+export async function checkPlan(accessToken: string) {
+  const [model] = await fetchModels(accessToken)
+  if (!model) throw new PlanCheckError('MODEL_UNAVAILABLE')
+  await streamText(accessToken, model.slug, [{ role: 'user', content: 'Reply with one word: Ready.' }])
   return model
 }

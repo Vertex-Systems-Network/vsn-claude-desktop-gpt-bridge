@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AccountStatus } from '../../shared/account'
 
-export function AccountPanel() {
+export function AccountPanel({ chatBusy, onDisconnect }: { chatBusy: boolean; onDisconnect: () => void }) {
   const [status, setStatus] = useState<AccountStatus>()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState(false)
@@ -18,7 +18,7 @@ export function AccountPanel() {
     update()
     const timer = pending ? setInterval(update, 250) : undefined
     return () => { active = false; clearInterval(timer) }
-  }, [bridge, pending])
+  }, [bridge, pending, chatBusy])
 
   async function run(action: () => Promise<AccountStatus>) {
     setPending(true)
@@ -49,24 +49,28 @@ export function AccountPanel() {
       </div>
       {error && <p role="alert">The desktop account service could not be reached.</p>}
       <div className="mt-4 flex flex-wrap gap-3">
-        {canSignIn && <button type="button" disabled={pending || !status} onClick={() => {
+        {canSignIn && <button type="button" disabled={chatBusy || pending || !status} onClick={() => {
           void run(requireConsent ? bridge.enablePlan : bridge.signIn)
         }}>
           {requireConsent ? 'Enable ChatGPT plan usage' : 'Continue with ChatGPT'}
         </button>}
-        {canVerify && <button type="button" disabled={pending} onClick={() => {
+        {canVerify && <button type="button" disabled={chatBusy || pending} onClick={() => {
           void run(bridge.verifyPlan)
         }}>Verify plan access</button>}
-        {status?.canRefresh && <button type="button" disabled={pending} onClick={() => {
+        {status?.canRefresh && <button type="button" disabled={chatBusy || pending} onClick={() => {
           void run(bridge.refreshAccount)
         }}>Check session</button>}
-        {status?.label && status.state !== 'SIGNED_OUT' && <button type="button" disabled={pending} onClick={() => {
-          void run(bridge.signOut)
+        {status?.label && status.state !== 'SIGNED_OUT' && <button type="button" disabled={chatBusy || pending} onClick={() => {
+          void run(async () => {
+            const next = await bridge.signOut()
+            if (next.state === 'SIGNED_OUT') onDisconnect()
+            return next
+          })
         }}>Disconnect</button>}
         {canCancel && <button type="button" onClick={() => {
           void bridge.cancelSignIn().catch(() => setError(true))
         }}>Cancel sign-in</button>}
-        {error && <button type="button" disabled={pending} onClick={() => {
+        {error && <button type="button" disabled={chatBusy || pending} onClick={() => {
           void run(bridge.getAccountStatus)
         }}>Refresh account status</button>}
       </div>

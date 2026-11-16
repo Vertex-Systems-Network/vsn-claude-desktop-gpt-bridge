@@ -8,3 +8,10 @@ export const accountChannels = {
   refresh: 'deskagent:account-refresh',
   signOut: 'deskagent:account-sign-out',
 } as const
+export const chatChannels = {
+  status: 'deskagent:chat-status',
+  models: 'deskagent:chat-models',
+  send: 'deskagent:chat-send',
+  stop: 'deskagent:chat-stop',
+  clear: 'deskagent:chat-clear',
+} as const

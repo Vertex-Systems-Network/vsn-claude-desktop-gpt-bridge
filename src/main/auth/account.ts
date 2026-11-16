@@ -229,6 +229,22 @@ export class AccountService {
     }
   }
 
+  async chatAccessToken(): Promise<string> {
+    let tokens = this.record?.tokens
+    if (this.status.busy || !tokens || !hasPlanGrant(tokens.scopes, tokens.refresh) ||
+      !['READY', 'PLAN_CONNECTED', 'RECONNECT_REQUIRED'].includes(this.status.state)) {
+      throw new PlanCheckError('CHAT_AUTH_REQUIRED')
+    }
+    if (tokens.needsIdentityVerification || tokens.expiresAt <= Date.now() + 60_000) {
+      const status = await this.refresh()
+      tokens = this.record?.tokens
+      if (status.state !== 'PLAN_CONNECTED' || !tokens || tokens.expiresAt <= Date.now()) {
+        throw new PlanCheckError('CHAT_AUTH_REQUIRED')
+      }
+    }
+    return tokens.access
+  }
+
   async verifyPlan(): Promise<AccountStatus> {
     if (this.status.busy || !['PLAN_CONNECTED', 'READY'].includes(this.status.state)) return this.status
     const tokens = this.record?.tokens

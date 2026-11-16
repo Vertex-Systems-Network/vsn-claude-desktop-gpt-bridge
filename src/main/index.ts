@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { accountChannels, runtimeChannel } from '../shared/channel'
+import { accountChannels, chatChannels, runtimeChannel } from '../shared/channel'
+import { maxPromptLength } from '../shared/chat'
+import { ChatService } from './inference/chat'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
 
@@ -40,33 +42,50 @@ function openWindow() {
   return window
 }
 
-function handleRequest(channel: string, handler: () => unknown) {
+function handleRequest(channel: string, handler: (...args: unknown[]) => unknown, arity = 0) {
   ipcMain.handle(channel, (event, ...args: unknown[]) => {
     const contents = mainWindow?.webContents
     if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
-      event.senderFrame?.url !== new URL(rendererUrl).href || args.length !== 0) {
+      event.senderFrame?.url !== new URL(rendererUrl).href || args.length !== arity) {
       throw new Error('Invalid desktop request')
     }
-    return handler()
+    return handler(...args)
   })
 }
 
 async function start() {
   const account = new AccountService(new AccountStore(join(app.getPath('userData'), 'auth')))
   if (!smoke) await account.initialize()
+  const chat = new ChatService(() => account.chatAccessToken())
+  handleRequest(chatChannels.status, () => chat.snapshot())
+  handleRequest(chatChannels.models, () => chat.loadModels())
+  handleRequest(chatChannels.stop, () => chat.stop())
+  handleRequest(chatChannels.clear, () => chat.clear())
+  handleRequest(chatChannels.send, (model, prompt) => {
+    if (typeof model !== 'string' || !model || model.length > 160 ||
+      typeof prompt !== 'string' || !prompt.trim() || prompt.length > maxPromptLength) {
+      throw new Error('Invalid chat request')
+    }
+    return chat.send(model, prompt.trim())
+  }, 2)
   handleRequest(accountChannels.status, () => account.getStatus())
-  handleRequest(accountChannels.signIn, () => account.signIn(false))
-  handleRequest(accountChannels.consent, () => account.signIn(true))
+  handleRequest(accountChannels.signIn, () => chat.busy ? account.getStatus() : account.signIn(false))
+  handleRequest(accountChannels.consent, () => chat.busy ? account.getStatus() : account.signIn(true))
   handleRequest(accountChannels.cancel, () => account.cancel())
-  handleRequest(accountChannels.verifyPlan, () => account.verifyPlan())
-  handleRequest(accountChannels.refresh, () => account.refresh())
-  handleRequest(accountChannels.signOut, () => account.signOut())
+  handleRequest(accountChannels.verifyPlan, () => chat.busy ? account.getStatus() : account.verifyPlan())
+  handleRequest(accountChannels.refresh, () => chat.busy ? account.getStatus() : account.refresh())
+  handleRequest(accountChannels.signOut, () => {
+    if (chat.busy || account.getStatus().busy) return account.getStatus()
+    chat.clear(true)
+    return account.signOut()
+  })
   handleRequest(runtimeChannel, () => runtimeInfo.parse({
       appVersion: app.getVersion(),
       electronVersion: process.versions.electron,
       platform: process.platform,
   }))
   const window = openWindow()
+  window.on('closed', () => chat.stop())
   await window.loadURL(rendererUrl)
   if (smoke) {
     const verified: unknown = await window.webContents.executeJavaScript(`
@@ -76,7 +95,9 @@ async function start() {
         for (let attempt = 0; attempt < 40 && !document.querySelector('main h1'); attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        return info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
+        const chat = await window.deskAgent.loadChatModels();
+        return chat.models.length === 0 && chat.error.includes('CHAT_AUTH_REQUIRED') &&
+          !!document.querySelector('#chat-prompt') && info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
           Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'verifiedModel', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
           document.title === 'DeskAgent' && !!document.querySelector('main h1');

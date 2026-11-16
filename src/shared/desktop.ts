@@ -1,3 +1,4 @@
+import type { ChatSnapshot } from './chat'
 import type { AccountStatus } from './account'
 import { z } from 'zod'
 
@@ -17,5 +18,10 @@ export interface DesktopBridge {
   verifyPlan(): Promise<AccountStatus>
   refreshAccount(): Promise<AccountStatus>
   signOut(): Promise<AccountStatus>
+  getChat(): Promise<ChatSnapshot>
+  loadChatModels(): Promise<ChatSnapshot>
+  sendChat(model: string, prompt: string): Promise<ChatSnapshot>
+  stopChat(): Promise<void>
+  clearChat(): Promise<ChatSnapshot>
   getRuntimeInfo(): Promise<RuntimeInfo>
 }

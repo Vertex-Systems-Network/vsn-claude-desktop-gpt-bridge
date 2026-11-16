@@ -9,3 +9,5 @@ Earlier runs exposed an npm 10 internal dependency resolution crash and a Common
 ## Live verification
 
 The plan-check suite uses test responses for catalog filtering, OAuth request shape, split streaming frames, incomplete streams and provider errors. Live authorization requires an eligible account, browser consent and a completed real response. No live account, installer or final acceptance case has been verified.
+
+The [plan verification run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43976218127) passed 18 tests, the production build, and the Windows smoke test. Chat coverage adds completed context, interruption, incremental output, and enforcement of account model selection. Live ChatGPT consent and inference are separate from these fixture tests.
