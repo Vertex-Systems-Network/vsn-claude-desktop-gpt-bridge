@@ -1,11 +1,11 @@
 # Test report
 
-Phase 1 verification is pending. The Windows workflow is configured to run lint, type checks, Vitest, the production build and an Electron IPC smoke test. No live provider verification or installer verification has been performed. AT-001 through AT-020 remain unverified.
+## Windows verification
 
-The smoke test includes a Windows DPAPI round trip with a synthetic string. The execution environment was unavailable, and the GitHub connector has not returned a result for the push-triggered verification workflow.
+The [verified run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43975672040) on `db49893` passed lint, type checking, 13 Vitest cases, the production build and the Electron smoke test. The smoke test launched on Windows, checked renderer account IPC and checked a synthetic Windows DPAPI credential round trip.
 
-The OAuth suite covers challenge creation, fresh registration and explicit re-consent, callback validation, one-time loopback handling, and granted scope checks. These cases and the startup smoke test remain unexecuted in this session. No live OAuth exchange was performed.
+Earlier runs exposed an npm 10 internal dependency resolution crash and a CommonJS import lint error. The fixes were to use Node 24 with its bundled npm and convert the launcher to ESM. [Install failure](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43975145300) · [Lint failure](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43975439452)
 
-The [first PR run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43975145300) failed during dependency installation. npm 10.9.9 reported an internal `edgesOut` error. Checks and build were skipped. A follow-up run uses Node 24 and captures useful installation diagnostics on failure.
+## Live verification
 
-The [second PR run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43975439452) installed dependencies successfully on Node 24. ESLint rejected two CommonJS imports in the smoke launcher. The launcher now uses native ESM, with the lint rule preserved.
+The plan-check suite uses test responses for catalog filtering, OAuth request shape, split streaming frames, incomplete streams and provider errors. Live authorization requires an eligible account, browser consent and a completed real response. No live account, installer or final acceptance case has been verified.

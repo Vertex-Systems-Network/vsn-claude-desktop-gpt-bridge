@@ -7,6 +7,7 @@ const bridge: DesktopBridge = {
   signIn: () => ipcRenderer.invoke(accountChannels.signIn),
   enablePlan: () => ipcRenderer.invoke(accountChannels.consent),
   cancelSignIn: () => ipcRenderer.invoke(accountChannels.cancel),
+  verifyPlan: () => ipcRenderer.invoke(accountChannels.verifyPlan),
   refreshAccount: () => ipcRenderer.invoke(accountChannels.refresh),
   signOut: () => ipcRenderer.invoke(accountChannels.signOut),
   async getRuntimeInfo() {

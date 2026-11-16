@@ -14,6 +14,7 @@ export interface DesktopBridge {
   signIn(): Promise<AccountStatus>
   enablePlan(): Promise<AccountStatus>
   cancelSignIn(): Promise<AccountStatus>
+  verifyPlan(): Promise<AccountStatus>
   refreshAccount(): Promise<AccountStatus>
   signOut(): Promise<AccountStatus>
   getRuntimeInfo(): Promise<RuntimeInfo>

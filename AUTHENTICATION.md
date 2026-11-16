@@ -15,3 +15,5 @@ The OpenAI DevKit packages are private npm workspaces in the official source rep
 - [DevKit license](https://github.com/openai/sign-in-with-chatgpt-devkit/blob/main/LICENSE)
 - [SIWC terms](https://openai.com/policies/sign-in-with-chatgpt-terms/)
 - [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
+
+**Verify plan access** fetches the authenticated account catalog and sends one fixed prompt to the first visible model. The action uses plan allowance and completes only when the stream delivers a nonempty response and an official completion event. It sends no user documents, code or conversation text.

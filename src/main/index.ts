@@ -58,6 +58,7 @@ async function start() {
   handleRequest(accountChannels.signIn, () => account.signIn(false))
   handleRequest(accountChannels.consent, () => account.signIn(true))
   handleRequest(accountChannels.cancel, () => account.cancel())
+  handleRequest(accountChannels.verifyPlan, () => account.verifyPlan())
   handleRequest(accountChannels.refresh, () => account.refresh())
   handleRequest(accountChannels.signOut, () => account.signOut())
   handleRequest(runtimeChannel, () => runtimeInfo.parse({
@@ -76,7 +77,7 @@ async function start() {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
         return info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
-          Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'label', 'message', 'code'].includes(key)) &&
+          Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'verifiedModel', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
           document.title === 'DeskAgent' && !!document.querySelector('main h1');
       })()

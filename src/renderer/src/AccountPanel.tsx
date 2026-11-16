@@ -33,7 +33,8 @@ export function AccountPanel() {
   }
 
   const requireConsent = status?.state === 'PLAN_PERMISSION_REQUIRED'
-  const isConnected = status?.state === 'PLAN_CONNECTED'
+  const canVerify = status?.state === 'PLAN_CONNECTED' || status?.state === 'READY'
+  const canSignIn = !canVerify && status?.state !== 'ACCOUNT_INELIGIBLE'
   const canCancel = pending && status?.state === 'WAITING_FOR_CALLBACK'
 
   return (
@@ -43,15 +44,19 @@ export function AccountPanel() {
       <div className="mt-4" aria-live="polite">
         {status?.label && <p>{status.label}</p>}
         <p>{status?.message ?? (status ? 'Signed out' : 'Checking local account…')}</p>
+        {status?.verifiedModel && <p>Verified model: {status.verifiedModel}</p>}
         {status?.code && <p className="muted">{status.code}</p>}
       </div>
       {error && <p role="alert">The desktop account service could not be reached.</p>}
       <div className="mt-4 flex flex-wrap gap-3">
-        {!isConnected && <button type="button" disabled={pending || !status} onClick={() => {
+        {canSignIn && <button type="button" disabled={pending || !status} onClick={() => {
           void run(requireConsent ? bridge.enablePlan : bridge.signIn)
         }}>
           {requireConsent ? 'Enable ChatGPT plan usage' : 'Continue with ChatGPT'}
         </button>}
+        {canVerify && <button type="button" disabled={pending} onClick={() => {
+          void run(bridge.verifyPlan)
+        }}>Verify plan access</button>}
         {status?.canRefresh && <button type="button" disabled={pending} onClick={() => {
           void run(bridge.refreshAccount)
         }}>Check session</button>}

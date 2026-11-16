@@ -8,6 +8,7 @@ export interface AccountStatus {
   state: AccountState
   busy: boolean
   canRefresh?: boolean
+  verifiedModel?: string
   label?: string
   message?: string
   code?: string

@@ -4,6 +4,7 @@ export const accountChannels = {
   signIn: 'deskagent:account-sign-in',
   consent: 'deskagent:account-consent',
   cancel: 'deskagent:account-cancel',
+  verifyPlan: 'deskagent:account-verify-plan',
   refresh: 'deskagent:account-refresh',
   signOut: 'deskagent:account-sign-out',
 } as const

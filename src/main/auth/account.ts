@@ -1,5 +1,6 @@
 import { shell } from 'electron'
 import { z } from 'zod'
+import { checkPlan, PlanCheckError } from '../inference/plan-check'
 import type { AccountState, AccountStatus } from '../../shared/account'
 import { AuthFailure, authorizeUrl, createAttempt, hasPlanGrant, issuer, openCallback, resource } from './oauth'
 import { AccountStore, type StoredAccount } from './store'
@@ -225,6 +226,37 @@ export class AccountService {
       return this.fromRecord()
     } catch (error) {
       return this.report(error, 'DeskAgent could not verify or save the renewed session. Reconnect if retrying does not help.')
+    }
+  }
+
+  async verifyPlan(): Promise<AccountStatus> {
+    if (this.status.busy || !['PLAN_CONNECTED', 'READY'].includes(this.status.state)) return this.status
+    const tokens = this.record?.tokens
+    if (!tokens || tokens.needsIdentityVerification || !hasPlanGrant(tokens.scopes, tokens.refresh)) return this.fromRecord()
+    if (tokens.expiresAt <= Date.now()) return this.fromRecord()
+    this.set('MODEL_LOADING', true, 'Checking available models and waiting for a completed GPT response…')
+    try {
+      const model = await checkPlan(tokens.access)
+      this.set('READY', false, 'ChatGPT plan connected.')
+      this.status = { ...this.status, verifiedModel: model.display_name }
+      return this.status
+    } catch (error) {
+      if (!(error instanceof PlanCheckError)) {
+        return this.set('PLAN_CONNECTED', false, 'DeskAgent could not complete the plan check. Try again.', 'INFERENCE_UNAVAILABLE')
+      }
+      const diagnostic = error.requestId ? error.code + ' (' + error.requestId + ')' : error.code
+      if (error.code === 'subscription_sharing_user_not_eligible') {
+        return this.set('ACCOUNT_INELIGIBLE', false, 'ChatGPT plan usage is unavailable for this account or workspace.', diagnostic)
+      }
+      if (error.httpStatus === 401) {
+        return this.set('RECONNECT_REQUIRED', false, 'OpenAI did not accept this session. Reconnect before checking access again.', diagnostic)
+      }
+      if (error.code === 'subscription_sharing_usage_limit_exceeded') {
+        return this.set('PLAN_CONNECTED', false, 'The plan usage limit has been reached. Try again when ChatGPT shows that usage is available.', diagnostic)
+      }
+      const message = error.code === 'MODEL_UNAVAILABLE' ? 'OpenAI returned no visible models for this account.'
+        : 'OpenAI did not complete the plan check. Review the diagnostic and try again when appropriate.'
+      return this.set('PLAN_CONNECTED', false, message, diagnostic)
     }
   }
 
