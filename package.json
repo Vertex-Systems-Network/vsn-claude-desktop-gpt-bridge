@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test",
-    "smoke": "node tests/smoke.cjs"
+    "smoke": "node tests/smoke.mjs"
   },
   "dependencies": {
     "jose": "^6.1.0",

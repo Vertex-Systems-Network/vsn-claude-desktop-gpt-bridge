@@ -4,7 +4,7 @@ A Windows desktop workspace in development. The current build opens a local shel
 
 ## Development
 
-Use Node.js 22.12 or later in the 22.x line and npm.
+Use Node.js 24 and its bundled npm, matching Windows CI.
 
 ```powershell
 npm install
