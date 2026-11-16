@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { runtimeChannel } from '../shared/channel'
+import { accountChannels, runtimeChannel } from '../shared/channel'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
+import { AccountService } from './auth/account'
+import { AccountStore } from './auth/store'
 
 const rendererPath = join(__dirname, '../renderer/index.html')
 const rendererUrl = !app.isPackaged && process.env.ELECTRON_RENDERER_URL
@@ -37,29 +39,42 @@ function openWindow() {
   return window
 }
 
-async function start() {
-  ipcMain.handle(runtimeChannel, (event, ...args: unknown[]) => {
+function handleRequest(channel: string, handler: () => unknown) {
+  ipcMain.handle(channel, (event, ...args: unknown[]) => {
     const contents = mainWindow?.webContents
     if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
-      event.senderFrame.url !== new URL(rendererUrl).href || args.length !== 0) {
-      throw new Error('Invalid runtime information request')
+      event.senderFrame?.url !== new URL(rendererUrl).href || args.length !== 0) {
+      throw new Error('Invalid desktop request')
     }
-    return runtimeInfo.parse({
-      appVersion: app.getVersion(),
-      electronVersion: process.versions.electron,
-      platform: process.platform,
-    })
+    return handler()
   })
+}
+
+async function start() {
+  const account = new AccountService(new AccountStore(join(app.getPath('userData'), 'auth')))
+  if (!smoke) await account.initialize()
+  handleRequest(accountChannels.status, () => account.getStatus())
+  handleRequest(accountChannels.signIn, () => account.signIn(false))
+  handleRequest(accountChannels.consent, () => account.signIn(true))
+  handleRequest(accountChannels.cancel, () => account.cancel())
+  handleRequest(accountChannels.signOut, () => account.signOut())
+  handleRequest(runtimeChannel, () => runtimeInfo.parse({
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    platform: process.platform,
+  }))
   const window = openWindow()
   await window.loadURL(rendererUrl)
   if (smoke) {
     const verified: unknown = await window.webContents.executeJavaScript(`
       (async () => {
         const info = await window.deskAgent.getRuntimeInfo();
+        const account = await window.deskAgent.getAccountStatus();
         for (let attempt = 0; attempt < 40 && !document.querySelector('main h1'); attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        return info.platform === 'win32' &&
+        return info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
+          Object.keys(account).every((key) => ['state', 'busy', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
           document.title === 'DeskAgent' && !!document.querySelector('main h1');
       })()
@@ -75,7 +90,8 @@ async function start() {
   }
 }
 
-void app.whenReady().then(start).catch((error: unknown) => {
+if (!smoke && !app.requestSingleInstanceLock()) app.quit()
+else void app.whenReady().then(start).catch((error: unknown) => {
   console.error('DeskAgent startup failed', error)
   app.exit(1)
 })

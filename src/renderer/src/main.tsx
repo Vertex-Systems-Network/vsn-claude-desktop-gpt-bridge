@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { DesktopBridge, RuntimeInfo } from '../../shared/desktop'
 import './styles.css'
+import { AccountPanel } from './AccountPanel'
 
 declare global {
   interface Window { deskAgent: DesktopBridge }
@@ -46,7 +47,8 @@ function Workspace() {
         </button>
       </header>
       <main className="mx-auto max-w-3xl px-7 py-14">
-        <h1 className="text-3xl font-semibold">Desktop diagnostics</h1>
+        <AccountPanel />
+        <h2 className="mt-12 text-xl font-semibold">Desktop diagnostics</h2>
         <p className="mt-3 muted">Check the connection between the desktop window and its local runtime.</p>
         <section className="mt-8 rounded-xl border p-6" aria-label="Runtime status" aria-live="polite">
           {diagnostics.status === 'loading' && <p>Checking runtime…</p>}
