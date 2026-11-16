@@ -10,6 +10,6 @@ const result = spawnSync(electron, ['.', '--deskagent-smoke'], {
 if (result.error) throw result.error
 process.stdout.write(result.stdout ?? '')
 process.stderr.write(result.stderr ?? '')
-if (result.status !== 0 || !result.stdout?.includes('DeskAgent Windows startup and sandboxed IPC verified')) {
+if (result.status !== 0 || !result.stdout?.includes('DeskAgent Windows startup, sandboxed IPC and DPAPI verified')) {
   process.exitCode = 1
 }

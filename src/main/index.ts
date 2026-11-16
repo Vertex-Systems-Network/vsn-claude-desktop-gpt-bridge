@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runtimeChannel } from '../shared/channel'
 import { runtimeInfo } from '../shared/desktop'
+import { decryptCredential, encryptCredential } from './auth/credential-protection'
 
 const rendererPath = join(__dirname, '../renderer/index.html')
 const rendererUrl = !app.isPackaged && process.env.ELECTRON_RENDERER_URL
@@ -64,7 +65,12 @@ async function start() {
       })()
     `)
     if (verified !== true) throw new Error('DeskAgent renderer IPC smoke failed')
-    console.log('DeskAgent Windows startup and sandboxed IPC verified')
+    const sentinel = 'DeskAgent synthetic credential'
+    const encrypted = encryptCredential(sentinel)
+    if (encrypted.includes(Buffer.from(sentinel)) || decryptCredential(encrypted) !== sentinel) {
+      throw new Error('DeskAgent Windows credential protection smoke failed')
+    }
+    console.log('DeskAgent Windows startup, sandboxed IPC and DPAPI verified')
     app.exit(0)
   }
 }

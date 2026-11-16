@@ -14,4 +14,4 @@ npm run build
 npm run smoke
 ```
 
-The smoke test launches Electron and verifies the packaged renderer's connection to the main process. Run it in a Windows desktop session. See [feasibility](docs/FEASIBILITY.md), [progress](PROGRESS.md) and the [test report](TEST_REPORT.md).
+The smoke test launches Electron and verifies the built renderer's connection to the main process and a synthetic Windows credential encryption round trip. Run it in a Windows desktop session. See [feasibility](docs/FEASIBILITY.md), [progress](PROGRESS.md) and the [test report](TEST_REPORT.md).
