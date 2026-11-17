@@ -38,14 +38,18 @@ async function withMcpClient<T>(config: McpProbe, operate: (client: McpClient) =
 
 export async function discoverMcpTools(config: McpProbe): Promise<McpDiscovery> {
   return withMcpClient(config, async (client) => {
-      if (!client.getServerCapabilities()?.tools) return { tools: [], truncated: false }
-      const result = await client.listTools()
-      return {
-        tools: result.tools.slice(0, 100).map(({ name, description }) => ({
+    if (!client.getServerCapabilities()?.tools) return { tools: [], truncated: false }
+    const result = await client.listTools()
+    return {
+      tools: result.tools.slice(0, 100).map(({ name, description, inputSchema }) => {
+        const schema = JSON.stringify(inputSchema, null, 2)
+        return {
           name, description: (description ?? '').slice(0, 2_000),
-        })),
-        truncated: result.tools.length > 100 || Boolean(result.nextCursor),
-      }
+          inputSchema: schema.length <= 8_000 ? schema : null,
+        }
+      }),
+      truncated: result.tools.length > 100 || Boolean(result.nextCursor),
+    }
   })
 }
 

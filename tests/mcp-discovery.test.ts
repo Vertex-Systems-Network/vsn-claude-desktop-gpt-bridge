@@ -8,8 +8,10 @@ it('rejects a relative executable path', async () => {
 
 it('discovers tool metadata from a local stdio MCP child', async () => {
   const fixture = fileURLToPath(new URL('./fixtures/mcp-discovery.mjs', import.meta.url))
-  await expect(discoverMcpTools({ executable: process.execPath, args: [fixture] })).resolves.toEqual({
-    tools: [{ name: 'fixture_tool', description: 'A local fixture' }], truncated: false,
+  const result = await discoverMcpTools({ executable: process.execPath, args: [fixture] })
+  expect(result).toMatchObject({ tools: [{ name: 'fixture_tool', description: 'A local fixture' }], truncated: false })
+  expect(JSON.parse(result.tools[0]?.inputSchema ?? '')).toMatchObject({
+    type: 'object', properties: { text: { type: 'string' } }, required: ['text'],
   })
 }, 15_000)
 

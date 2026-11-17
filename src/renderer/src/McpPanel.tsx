@@ -100,6 +100,8 @@ export function McpPanel({ chatBusy, onUseOutput }: {
     finally { setBusy(false) }
   }
 
+  const selectedTool = result?.tools.find(({ name }) => name === tool)
+
   async function callTool() {
     const values = argumentsList()
     if (!values || !tool || !result?.tools.some(({ name }) => name === tool) || busy) return
@@ -166,6 +168,12 @@ export function McpPanel({ chatBusy, onUseOutput }: {
             {result.tools.map(({ name }, index) => <option key={index} value={name}>{name}</option>)}
           </select>
         </label>
+        {selectedTool && <details className="rounded border p-3">
+          <summary>Tool input schema</summary>
+          {selectedTool.inputSchema ? (
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all">{selectedTool.inputSchema}</pre>
+          ) : <p className="mt-2 muted">This schema is too large to display. DeskAgent still checks the arguments before execution.</p>}
+        </details>}
         <label className="grid gap-2">Tool arguments (JSON object)
           <textarea className="rounded border bg-transparent p-2" rows={3} value={toolArgs} maxLength={8000}
             disabled={busy} onChange={(event) => setToolArgs(event.target.value)} />
