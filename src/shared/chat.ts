@@ -8,6 +8,7 @@ export type ChatTurn = {
 export type SavedChat = { id: string; title: string }
 export type ChatChange =
   | { action: 'temporary' }
+  | { action: 'project'; id: string | null; projectId: string | null }
   | { action: 'rename'; id: string; title: string }
   | { action: 'archive' | 'restore' | 'delete'; id: string }
 
@@ -19,6 +20,8 @@ export interface ChatSnapshot {
   archived?: SavedChat[]
   activeChat?: { title: string; archived: boolean }
   temporary?: boolean
+  projectId?: string
+  canLinkProject?: boolean
   conversation?: string
   historyError?: string
   error?: string

@@ -21,3 +21,5 @@ The [search and export run](https://github.com/Vertex-Systems-Network/vsn-claude
 The [chat lifecycle run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43985246539) passed 27 tests and the native Windows smoke test. Projects adds a SQLite reopen/CRUD test and a renderer-to-main Projects IPC check in the native smoke test.
 
 The first Projects run reached TypeScript and found a SQLite row type assertion error. The project record now uses the same structural type pattern as the other SQLite records.
+
+The [Projects CRUD run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43986072831) passed 28 tests. Project-linked chat adds a schema migration and a mocked Responses API test for creating, reopening and unlinking a project-scoped conversation.

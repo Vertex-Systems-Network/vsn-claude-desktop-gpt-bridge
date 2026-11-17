@@ -112,7 +112,7 @@ async function start() {
     return storage.save({ name: input.name, instructions: input.instructions, folder }, input.id)
   }, 1)
   handleRequest(projectChannels.delete, (id) => projectStorage().delete(z.uuid().parse(id)), 1)
-  const chat = new ChatService(() => account.chatAccessToken(), history, () => account.historyAccount())
+  const chat = new ChatService(() => account.chatAccessToken(), history, () => account.historyAccount(), (id) => projects?.get(id))
   if (smoke && history) {
     const id = history.append('smoke-profile', undefined, 0, 'smoke-model', 'smoke prompt')
     history.update('smoke-profile', id, 0, { prompt: 'smoke prompt', reply: 'smoke reply', phase: 'complete' })
@@ -128,6 +128,7 @@ async function start() {
   }, 1)
   const chatChange = z.discriminatedUnion('action', [
     z.strictObject({ action: z.literal('temporary') }),
+    z.strictObject({ action: z.literal('project'), id: z.uuid().nullable(), projectId: z.uuid().nullable() }),
     z.strictObject({ action: z.literal('rename'), id: z.uuid(), title: z.string().trim().min(1).max(160) }),
     z.strictObject({ action: z.enum(['archive', 'restore', 'delete']), id: z.uuid() }),
   ])

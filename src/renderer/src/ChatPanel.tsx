@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import type { Project } from '../../shared/project'
 import type { FormEvent } from 'react'
 import { maxPromptLength } from '../../shared/chat'
 import type { ChatChange, ChatSnapshot, SavedChat } from '../../shared/chat'
 
-export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
+export function ChatPanel({ onBusy, projects }: { onBusy: (busy: boolean) => void; projects: Project[] }) {
   const bridge = window.deskAgent
   const [chat, setChat] = useState<ChatSnapshot>({ models: [], turns: [], busy: false })
   const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open' | 'change'>()
@@ -166,6 +167,21 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
         <button type="button" disabled={busy || exporting} onClick={() => { void exportConversation('md') }}>Export Markdown</button>
         <button type="button" disabled={busy || exporting} onClick={() => { void exportConversation('json') }}>Export JSON</button>
       </div>}
+      {chat.canLinkProject && (projects.length > 0 || chat.projectId) && (
+        <label className="mt-4 grid gap-2">
+          Project
+          <select className="rounded border bg-transparent p-2" disabled={busy} value={chat.projectId ?? ''}
+            onChange={(event) => changeChat({
+              action: 'project', id: chat.conversation ?? null, projectId: event.target.value || null,
+            })}>
+            <option value="">No project</option>
+            {chat.projectId && !projects.some(({ id }) => id === chat.projectId) &&
+              <option value={chat.projectId}>Unavailable project</option>}
+            {projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <span className="muted">Sending a message includes the selected project’s instructions.</span>
+        </label>
+      )}
       {chat.historyError && <p className="mt-4" role="alert">{chat.historyError}</p>}
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="grid min-w-52 gap-2">

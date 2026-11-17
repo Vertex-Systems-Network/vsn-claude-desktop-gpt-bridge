@@ -90,13 +90,14 @@ export async function streamText(
   input: ChatMessage[],
   onDelta?: (delta: string) => void,
   cancel?: AbortSignal,
+  instructions?: string,
 ): Promise<string> {
   const timeout = AbortSignal.timeout(120_000)
   const response = await fetch(api + '/responses', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
     redirect: 'error', signal: cancel ? AbortSignal.any([cancel, timeout]) : timeout,
-    body: JSON.stringify({ model, store: false, stream: true, input }),
+    body: JSON.stringify({ model, store: false, stream: true, input, instructions }),
   })
   await ensureSuccess(response)
   if (!response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {

@@ -64,7 +64,7 @@ it('upgrades a version 1 history without losing the existing conversation', () =
     try { id = original.append('owner', undefined, 0, 'model', 'old history') }
     finally { original.close() }
     const legacy = new DatabaseSync(path)
-    try { legacy.exec('ALTER TABLE conversations DROP COLUMN archived; PRAGMA user_version = 1') }
+    try { legacy.exec('ALTER TABLE conversations DROP COLUMN archived; ALTER TABLE conversations DROP COLUMN project_id; PRAGMA user_version = 1') }
     finally { legacy.close() }
     const upgraded = new ChatHistory(path)
     try {

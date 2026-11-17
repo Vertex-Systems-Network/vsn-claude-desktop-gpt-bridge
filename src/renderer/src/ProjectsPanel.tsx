@@ -4,7 +4,7 @@ import type { Project, ProjectInput } from '../../shared/project'
 
 const blank: ProjectInput = { name: '', instructions: '', chooseFolder: true }
 
-export function ProjectsPanel() {
+export function ProjectsPanel({ onProjects }: { onProjects: (projects: Project[]) => void }) {
   const bridge = window.deskAgent
   const [projects, setProjects] = useState<Project[]>()
   const [draft, setDraft] = useState<ProjectInput>()
@@ -20,6 +20,10 @@ export function ProjectsPanel() {
     )
     return () => { active = false }
   }, [bridge, attempt])
+
+  useEffect(() => {
+    if (projects) onProjects(projects)
+  }, [projects, onProjects])
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

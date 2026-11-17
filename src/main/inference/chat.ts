@@ -1,10 +1,11 @@
 import type { ChatChange, ChatMessage, ChatSnapshot, ChatTurn, SavedChat } from '../../shared/chat'
+import type { Project } from '../../shared/project'
 import type { ChatHistory } from '../storage/history'
 import { fetchModels, PlanCheckError, streamText } from './plan-check'
 
-export function assembleContext(turns: ChatTurn[], prompt: string): ChatMessage[] {
+export function assembleContext(turns: ChatTurn[], prompt: string, instructionsLength = 0): ChatMessage[] {
   const history: ChatMessage[] = []
-  let remaining = 32_000 - prompt.length
+  let remaining = 32_000 - prompt.length - instructionsLength
   for (let index = turns.length - 1; index >= 0; index--) {
     const turn = turns[index]
     if (turn.phase !== 'complete') continue
@@ -45,11 +46,13 @@ export class ChatService {
   private archived: SavedChat[] = []
   private activeChat?: ChatSnapshot['activeChat']
   private temporary = false
+  private projectId?: string
 
   constructor(
     private readonly getAccess: () => Promise<string>,
     private readonly history?: ChatHistory,
     private readonly getScope: () => string | undefined = () => undefined,
+    private readonly getProject: (id: string) => Project | undefined = () => undefined,
   ) {}
 
   private syncHistory(): void {
@@ -62,6 +65,7 @@ export class ChatService {
     this.archived = []
     this.activeChat = undefined
     this.temporary = false
+    this.projectId = undefined
     this.conversation = undefined
     this.error = undefined
     this.historyError = undefined
@@ -74,6 +78,7 @@ export class ChatService {
       if (latest) {
         this.turns = this.history.read(scope, latest.id) ?? []
         this.conversation = latest.id
+        this.projectId = this.history.project(scope, latest.id)
         this.activeChat = this.history.details(scope, latest.id)
       }
     } catch {
@@ -105,6 +110,7 @@ export class ChatService {
       }
       this.turns = turns
       this.conversation = id
+      this.projectId = this.history.project(this.scope, id)
       this.activeChat = this.history.details(this.scope, id)
       this.temporary = false
       this.error = undefined
@@ -123,6 +129,7 @@ export class ChatService {
       this.temporary = true
       return this.snapshot()
     }
+    if (change.action === 'project') return this.linkProject(change.id, change.projectId)
     const { scope, history } = this
     if (!scope || !history || change.id !== this.conversation) return this.snapshot()
     try {
@@ -141,11 +148,24 @@ export class ChatService {
     return this.snapshot()
   }
 
+  private linkProject(id: string | null, projectId: string | null): ChatSnapshot {
+    if (this.temporary || !this.scope || !this.history || (this.conversation ?? null) !== id) return this.snapshot()
+    try {
+      if (projectId && !this.getProject(projectId)) throw new Error('Project unavailable')
+      if (id && !this.history.linkProject(this.scope, id, projectId)) throw new Error('Conversation unavailable')
+      this.projectId = projectId ?? undefined
+      this.historyError = undefined
+    } catch {
+      this.historyError = 'DeskAgent could not update this conversation’s project.'
+    }
+    return this.snapshot()
+  }
+
   get busy() { return this.running }
 
   snapshot(): ChatSnapshot {
     this.syncHistory()
-    return { temporary: this.temporary, archived: this.archived, activeChat: this.activeChat, saved: this.saved, conversation: this.conversation, historyError: this.historyError, models: this.models, turns: this.turns.map((turn) => ({ ...turn })), busy: this.busy, error: this.error }
+    return { canLinkProject: Boolean(this.scope && this.history && !this.temporary), projectId: this.projectId, temporary: this.temporary, archived: this.archived, activeChat: this.activeChat, saved: this.saved, conversation: this.conversation, historyError: this.historyError, models: this.models, turns: this.turns.map((turn) => ({ ...turn })), busy: this.busy, error: this.error }
   }
 
   async loadModels(): Promise<ChatSnapshot> {
@@ -178,14 +198,25 @@ export class ChatService {
       this.error = 'Restore this chat before sending a message.'
       return this.snapshot()
     }
-    const input = assembleContext(this.turns, prompt)
+    let instructions: string | undefined
+    if (this.projectId) {
+      try {
+        const project = this.getProject(this.projectId)
+        if (!project) throw new Error('Project unavailable')
+        instructions = project.instructions.trim() || undefined
+      } catch {
+        this.error = 'The linked project is unavailable. Unlink it or select another project.'
+        return this.snapshot()
+      }
+    }
+    const input = assembleContext(this.turns, prompt, instructions?.length)
     const turn: ChatTurn = { prompt, reply: '', phase: 'streaming' }
     const account = this.temporary ? undefined : this.scope
     const position = this.turns.length
     if (account) {
       try {
         if (!this.history) throw new Error('Chat history unavailable')
-        this.conversation = this.history.append(account, this.conversation, position, model, prompt)
+        this.conversation = this.history.append(account, this.conversation, position, model, prompt, this.projectId)
       } catch {
         this.historyError = 'The message could not be saved locally. DeskAgent did not send it.'
         return this.snapshot()
@@ -217,7 +248,7 @@ export class ChatService {
           checkpoint = Date.now()
           try { saveTurn() } catch { this.historyError = 'DeskAgent could not save a streaming checkpoint.' }
         }
-      }, request.signal)
+      }, request.signal, instructions)
       turn.phase = 'complete'
     } catch (error) {
       turn.phase = request.signal.aborted ? 'stopped' : 'failed'
@@ -240,6 +271,7 @@ export class ChatService {
       this.conversation = undefined
       this.activeChat = undefined
       this.temporary = false
+      this.projectId = undefined
       this.historyError = undefined
     }
     return this.snapshot()

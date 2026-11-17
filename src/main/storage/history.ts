@@ -10,7 +10,7 @@ export class ChatHistory {
     try {
       this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000')
       const version = Number(this.db.prepare('PRAGMA user_version').get()?.user_version)
-      if (version > 2) throw new Error('Chat database was created by a newer DeskAgent version')
+      if (version > 3) throw new Error('Chat database was created by a newer DeskAgent version')
       if (version === 0) this.db.exec(`
         BEGIN;
         CREATE TABLE conversations (
@@ -30,6 +30,12 @@ export class ChatHistory {
         BEGIN;
         ALTER TABLE conversations ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1));
         PRAGMA user_version = 2;
+        COMMIT;
+      `)
+      if (version < 3) this.db.exec(`
+        BEGIN;
+        ALTER TABLE conversations ADD COLUMN project_id TEXT;
+        PRAGMA user_version = 3;
         COMMIT;
       `)
       this.db.exec("UPDATE messages SET phase = 'stopped' WHERE phase = 'streaming'")
@@ -60,6 +66,16 @@ export class ChatHistory {
     if (row) return { title: String(row.title), archived: row.archived === 1 }
   }
 
+  project(account: string, id: string): string | undefined {
+    const row = this.db.prepare('SELECT project_id FROM conversations WHERE account = ? AND id = ?').get(account, id)
+    return typeof row?.project_id === 'string' ? row.project_id : undefined
+  }
+
+  linkProject(account: string, id: string, projectId: string | null): boolean {
+    return !!this.db.prepare('UPDATE conversations SET project_id = ? WHERE account = ? AND id = ?')
+      .run(projectId, account, id).changes
+  }
+
   rename(account: string, id: string, title: string): boolean {
     return !!this.db.prepare('UPDATE conversations SET title = ? WHERE account = ? AND id = ?').run(title, account, id).changes
   }
@@ -78,7 +94,7 @@ export class ChatHistory {
     return this.db.prepare('SELECT prompt, reply, phase FROM messages WHERE conversation = ? ORDER BY position').all(id) as ChatTurn[]
   }
 
-  append(account: string, current: string | undefined, position: number, model: string, prompt: string): string {
+  append(account: string, current: string | undefined, position: number, model: string, prompt: string, projectId?: string): string {
     const id = current ?? randomUUID()
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -87,7 +103,7 @@ export class ChatHistory {
         if (!changed.changes) throw new Error('Conversation not found')
       } else {
         const title = Array.from(prompt.replace(/\s+/g, ' ')).slice(0, 70).join('')
-        this.db.prepare('INSERT INTO conversations (id, account, title, updated) VALUES (?, ?, ?, ?)').run(id, account, title, Date.now())
+        this.db.prepare('INSERT INTO conversations (id, account, title, updated, project_id) VALUES (?, ?, ?, ?, ?)').run(id, account, title, Date.now(), projectId ?? null)
       }
       this.db.prepare("INSERT INTO messages (conversation, position, model, prompt, reply, phase) VALUES (?, ?, ?, ?, '', 'streaming')")
         .run(id, position, model, prompt)
