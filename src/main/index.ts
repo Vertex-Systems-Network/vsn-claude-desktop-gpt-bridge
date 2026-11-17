@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { accountChannels, chatChannels, projectChannels, runtimeChannel } from '../shared/channel'
 import { maxPromptLength } from '../shared/chat'
+import { listProjectFiles, previewProjectFile } from './projects/files'
 import { Projects } from './storage/projects'
 import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
@@ -85,6 +86,46 @@ async function start() {
     instructions: z.string().max(12_000),
     chooseFolder: z.boolean(),
   })
+  const folderGrants = new Map<string, string>()
+  handleRequest(projectChannels.grantFiles, async (value) => {
+    const id = z.uuid().parse(value)
+    const storage = projectStorage()
+    const project = storage.get(id)
+    if (!mainWindow || !project) return false
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'question', buttons: ['Allow for this session', 'Cancel'], defaultId: 1, cancelId: 1,
+      message: 'Allow read-only access to this project folder?',
+      detail: project.folder,
+    })
+    if (choice.response !== 0 || storage.get(id)?.folder !== project.folder) return false
+    folderGrants.set(id, project.folder)
+    return true
+  }, 1)
+  const browseArgs = z.tuple([z.uuid(), z.array(z.string().min(1).max(255)).max(32)])
+  const grantedRoot = (id: string) => {
+    const project = projectStorage().get(id)
+    if (!project || folderGrants.get(id) !== project.folder) {
+      throw new Error('Read access is unavailable for this folder.')
+    }
+    return project.folder
+  }
+  handleRequest(projectChannels.listFiles, async (...args) => {
+    const [id, parts] = browseArgs.parse(args)
+    const root = grantedRoot(id)
+    const result = await listProjectFiles(root, parts)
+    if (grantedRoot(id) !== root) throw new Error('Project folder changed.')
+    return result
+  }, 2)
+  handleRequest(projectChannels.previewFile, async (...args) => {
+    const [id, parts] = browseArgs.parse(args)
+    const root = grantedRoot(id)
+    const text = await previewProjectFile(root, parts)
+    if (grantedRoot(id) !== root) throw new Error('Project folder changed.')
+    return text
+  }, 2)
+  handleRequest(projectChannels.revokeFiles, (value) => {
+    folderGrants.delete(z.uuid().parse(value))
+  }, 1)
   handleRequest(projectChannels.list, () => projectStorage().list())
   handleRequest(projectChannels.save, async (value) => {
     const input = projectInput.parse(value)
@@ -109,9 +150,15 @@ async function start() {
         throw new Error('Choose a folder on a local drive.')
       }
     }
-    return storage.save({ name: input.name, instructions: input.instructions, folder }, input.id)
+    const saved = storage.save({ name: input.name, instructions: input.instructions, folder }, input.id)
+    if (current && current.folder !== saved.folder) folderGrants.delete(saved.id)
+    return saved
   }, 1)
-  handleRequest(projectChannels.delete, (id) => projectStorage().delete(z.uuid().parse(id)), 1)
+  handleRequest(projectChannels.delete, (value) => {
+    const id = z.uuid().parse(value)
+    folderGrants.delete(id)
+    return projectStorage().delete(id)
+  }, 1)
   const chat = new ChatService(() => account.chatAccessToken(), history, () => account.historyAccount(), (id) => projects?.get(id))
   if (smoke && history) {
     const id = history.append('smoke-profile', undefined, 0, 'smoke-model', 'smoke prompt')

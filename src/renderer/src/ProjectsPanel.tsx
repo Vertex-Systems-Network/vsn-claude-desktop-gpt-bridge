@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ProjectFiles } from './ProjectFiles'
 import type { FormEvent } from 'react'
 import type { Project, ProjectInput } from '../../shared/project'
 
@@ -7,6 +8,7 @@ const blank: ProjectInput = { name: '', instructions: '', chooseFolder: true }
 export function ProjectsPanel({ onProjects }: { onProjects: (projects: Project[]) => void }) {
   const bridge = window.deskAgent
   const [projects, setProjects] = useState<Project[]>()
+  const [filesProject, setFilesProject] = useState<string>()
   const [draft, setDraft] = useState<ProjectInput>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -91,13 +93,17 @@ export function ProjectsPanel({ onProjects }: { onProjects: (projects: Project[]
         {projects.map((project) => <li key={project.id} className="rounded border p-4">
           <h3 className="font-semibold break-words">{project.name}</h3>
           <p className="mt-1 break-all muted">{project.folder}</p>
-          <div className="mt-3 flex gap-3">
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" disabled={busy || !!draft} onClick={() => {
+              setFilesProject((current) => current === project.id ? undefined : project.id)
+            }}>{filesProject === project.id ? 'Hide files' : 'Browse files'}</button>
             <button type="button" disabled={busy || !!draft} onClick={() => {
               setError('')
               setDraft({ id: project.id, name: project.name, instructions: project.instructions, chooseFolder: false })
             }}>Edit</button>
             <button type="button" disabled={busy || !!draft} onClick={() => { void remove(project) }}>Remove</button>
           </div>
+          {filesProject === project.id && <ProjectFiles key={project.folder} project={project} />}
         </li>)}
       </ul>}
     </section>

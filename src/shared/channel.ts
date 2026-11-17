@@ -21,6 +21,10 @@ export const chatChannels = {
 } as const
 export const projectChannels = {
   list: 'deskagent:project-list',
+  grantFiles: 'deskagent:project-grant-files',
+  revokeFiles: 'deskagent:project-revoke-files',
+  listFiles: 'deskagent:project-list-files',
+  previewFile: 'deskagent:project-preview-file',
   save: 'deskagent:project-save',
   delete: 'deskagent:project-delete',
 } as const

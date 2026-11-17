@@ -1,4 +1,4 @@
-import type { Project, ProjectInput } from './project'
+import type { Project, ProjectInput, ProjectListing } from './project'
 import type { ChatChange, ChatSnapshot, SavedChat } from './chat'
 import type { AccountStatus } from './account'
 import { z } from 'zod'
@@ -28,6 +28,10 @@ export interface DesktopBridge {
   changeChat(change: ChatChange): Promise<ChatSnapshot>
   openChat(id: string): Promise<ChatSnapshot>
   clearChat(): Promise<ChatSnapshot>
+  grantProjectFiles(id: string): Promise<boolean>
+  revokeProjectFiles(id: string): Promise<void>
+  listProjectFiles(id: string, parts: string[]): Promise<ProjectListing>
+  previewProjectFile(id: string, parts: string[]): Promise<string>
   listProjects(): Promise<Project[]>
   saveProject(input: ProjectInput): Promise<Project | null>
   deleteProject(id: string): Promise<boolean>

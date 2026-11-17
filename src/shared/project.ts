@@ -11,3 +11,6 @@ export interface ProjectInput {
   instructions: string
   chooseFolder: boolean
 }
+
+export type ProjectEntry = { name: string; kind: 'directory' | 'file'; previewable: boolean }
+export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean }
