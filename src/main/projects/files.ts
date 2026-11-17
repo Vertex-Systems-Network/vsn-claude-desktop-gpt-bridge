@@ -13,7 +13,7 @@ const safeName = (part: string) => part.length <= 255 && part.length > 0 &&
   !/[\\/:*?"<>|]/.test(part) && !part.includes('\0') &&
   !/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(part)
 
-async function checkedPath(root: string, parts: string[]) {
+export async function checkedPath(root: string, parts: string[]) {
   if (!isAbsolute(root) || /^[\\/]{2}/.test(root) || parts.length > 32 || !parts.every(safeName)) {
     throw new Error('Invalid project path.')
   }

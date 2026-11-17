@@ -1,5 +1,5 @@
 import type { McpCall, McpCallResult, McpDiscovery, McpProbe, McpProfile, McpProfileInput } from './mcp'
-import type { Project, ProjectAttachment, ProjectInput, ProjectListing } from './project'
+import type { Project, ProjectAttachment, ProjectGitStatus, ProjectInput, ProjectListing } from './project'
 import type { ChatChange, ChatSnapshot, SavedChat } from './chat'
 import type { AccountStatus } from './account'
 import { z } from 'zod'
@@ -31,6 +31,7 @@ export interface DesktopBridge {
   clearChat(): Promise<ChatSnapshot>
   grantProjectFiles(id: string): Promise<boolean>
   revokeProjectFiles(id: string): Promise<void>
+  getProjectGitStatus(id: string): Promise<ProjectGitStatus | null>
   listProjectFiles(id: string, parts: string[]): Promise<ProjectListing>
   previewProjectFile(id: string, parts: string[]): Promise<string>
   listProjects(): Promise<Project[]>

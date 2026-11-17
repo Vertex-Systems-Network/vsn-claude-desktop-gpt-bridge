@@ -16,3 +16,9 @@ export type ProjectEntry = { name: string; kind: 'directory' | 'file'; previewab
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean }
 
 export type ProjectAttachment = { projectId: string; folder: string; parts: string[] }
+
+export type ProjectGitStatus = {
+  branch: string
+  changes: { status: string; path: string; previousPath?: string }[]
+  truncated: boolean
+}

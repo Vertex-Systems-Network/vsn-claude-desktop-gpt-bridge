@@ -19,3 +19,5 @@ Phase 6 starts with a user-approved, one-shot local stdio MCP discovery panel. I
 The local MCP panel displays the selected tool’s advertised JSON input schema before manual execution. Larger schemas are still validated at call time.
 
 The manual MCP argument editor now checks JSON shape before opening the confirmation and offers optional formatting. The main process still validates inputs before execution.
+
+Phase 7 starts with read-only Git status for granted project roots on Windows. The user selects an installed git.exe for the session. The panel displays branch and changed paths. Worktrees with external metadata are unsupported.

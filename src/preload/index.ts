@@ -21,6 +21,7 @@ const bridge: DesktopBridge = {
   clearChat: () => ipcRenderer.invoke(chatChannels.clear),
   grantProjectFiles: (id) => ipcRenderer.invoke(projectChannels.grantFiles, id),
   revokeProjectFiles: (id) => ipcRenderer.invoke(projectChannels.revokeFiles, id),
+  getProjectGitStatus: (id) => ipcRenderer.invoke(projectChannels.gitStatus, id),
   listProjectFiles: (id, parts) => ipcRenderer.invoke(projectChannels.listFiles, id, parts),
   previewProjectFile: (id, parts) => ipcRenderer.invoke(projectChannels.previewFile, id, parts),
   listProjects: () => ipcRenderer.invoke(projectChannels.list),

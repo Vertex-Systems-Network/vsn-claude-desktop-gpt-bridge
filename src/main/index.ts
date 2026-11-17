@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { accountChannels, chatChannels, mcpChannels, projectChannels, runtimeChannel } from '../shared/channel'
 import { maxPromptLength } from '../shared/chat'
+import { readProjectGitStatus, resolveGitExecutable } from './projects/git-status'
 import { listProjectFiles, previewProjectFile } from './projects/files'
 import { Projects } from './storage/projects'
 import { ChatHistory } from './storage/history'
@@ -112,6 +113,28 @@ async function start() {
     }
     return project.folder
   }
+  let gitExecutable: string | undefined
+  let gitBusy = false
+  handleRequest(projectChannels.gitStatus, async (value) => {
+    const id = z.uuid().parse(value)
+    if (!mainWindow || gitBusy || smoke) return null
+    const root = grantedRoot(id)
+    gitBusy = true
+    try {
+      if (!gitExecutable) {
+        const selection = await dialog.showOpenDialog(mainWindow, {
+          title: 'Select your installed git.exe for read-only project status', properties: ['openFile'],
+          filters: [{ name: 'Windows executable', extensions: ['exe'] }],
+        })
+        if (selection.canceled || !selection.filePaths[0]) return null
+        gitExecutable = await resolveGitExecutable(selection.filePaths[0])
+      }
+      if (grantedRoot(id) !== root) throw new Error('Project folder changed.')
+      const result = await readProjectGitStatus(root, gitExecutable)
+      if (grantedRoot(id) !== root) throw new Error('Project folder changed.')
+      return result
+    } finally { gitBusy = false }
+  }, 1)
   handleRequest(projectChannels.listFiles, async (...args) => {
     const [id, parts] = browseArgs.parse(args)
     const root = grantedRoot(id)

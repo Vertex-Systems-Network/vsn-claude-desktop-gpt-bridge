@@ -24,6 +24,7 @@ export const projectChannels = {
   grantFiles: 'deskagent:project-grant-files',
   revokeFiles: 'deskagent:project-revoke-files',
   listFiles: 'deskagent:project-list-files',
+  gitStatus: 'deskagent:project-git-status',
   previewFile: 'deskagent:project-preview-file',
   save: 'deskagent:project-save',
   delete: 'deskagent:project-delete',

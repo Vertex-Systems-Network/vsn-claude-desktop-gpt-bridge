@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import type { Project, ProjectAttachment, ProjectListing } from '../../shared/project'
+import type { Project, ProjectAttachment, ProjectGitStatus, ProjectListing } from '../../shared/project'
 
 export function ProjectFiles({ project, onAttach }: { project: Project; onAttach: (attachment: ProjectAttachment) => void }) {
   const bridge = window.deskAgent
   const [path, setPath] = useState<string[]>([])
   const [listing, setListing] = useState<ProjectListing>()
   const [preview, setPreview] = useState<{ name: string; text: string }>()
+  const [git, setGit] = useState<ProjectGitStatus>()
+  const [gitError, setGitError] = useState('')
   const [busy, setBusy] = useState(false)
   const [attachmentStatus, setAttachmentStatus] = useState('')
   const [error, setError] = useState('')
@@ -25,6 +27,17 @@ export function ProjectFiles({ project, onAttach }: { project: Project; onAttach
     setListing(result)
   }
 
+  async function checkGit() {
+    setGitError('')
+    setGit(undefined)
+    try {
+      const status = await bridge.getProjectGitStatus(project.id)
+      if (status) setGit(status)
+    } catch {
+      setGitError('Git status is unavailable. Check that the selected folder is a Git repository root and the selected git.exe is installed.')
+    }
+  }
+
   return (
     <section className="mt-4 grid gap-3" aria-label="Project files">
       {!listing ? <button type="button" disabled={busy} onClick={() => {
@@ -37,14 +50,27 @@ export function ProjectFiles({ project, onAttach }: { project: Project; onAttach
           <button type="button" disabled={busy || !path.length}
             onClick={() => { void run(() => browse(path.slice(0, -1))) }}>Parent folder</button>
           <button type="button" disabled={busy} onClick={() => { void run(() => browse(path)) }}>Refresh</button>
+          <button type="button" disabled={busy} onClick={() => { void run(checkGit) }}>Git status</button>
           <button type="button" disabled={busy} onClick={() => {
             void run(async () => {
               await bridge.revokeProjectFiles(project.id)
               setListing(undefined)
               setPreview(undefined)
+              setGit(undefined)
+              setGitError('')
             })
           }}>Revoke access</button>
         </div>
+        {gitError && <p role="alert">{gitError}</p>}
+        {git && <section className="grid gap-2 rounded border p-3" aria-label="Git status">
+          <strong className="break-all">{git.branch}</strong>
+          {git.changes.length ? <ul className="max-h-64 overflow-auto">
+            {git.changes.map(({ status, path: file, previousPath }) => <li key={file} className="break-all">
+              <code className="whitespace-pre">{status}</code>{' '}{previousPath ? previousPath + ' → ' : ''}{file}
+            </li>)}
+          </ul> : <p className="muted">Working tree is clean.</p>}
+          {git.truncated && <p className="muted">Showing up to 300 changed paths.</p>}
+        </section>}
         {listing.truncated && <p className="muted">Showing up to 300 items.</p>}
         {listing.entries.length === 0 && <p className="muted">No browsable items.</p>}
         <ul className="grid gap-2">
