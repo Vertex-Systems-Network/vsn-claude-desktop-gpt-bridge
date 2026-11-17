@@ -14,4 +14,4 @@ Phase 4 adds versioned local SQLite history, recent-chat selection, account scop
 
 Phase 5 started with the Projects panel, local SQLite project CRUD, native folder selection, and persisted instructions. Conversation-level project selection now persists locally and includes the current instructions on send. Projects now have session-based read-only folder grants, folder navigation, and local text previews. A user can attach one supported text file from a granted project folder. The current file content is read when sending and used for that request only.
 
-Phase 6 starts with a user-approved, one-shot local stdio MCP discovery panel. It shows tool names and descriptions and closes the connection. Tool calls, persisted connections and chat integration are pending.
+Phase 6 starts with a user-approved, one-shot local stdio MCP discovery panel. It shows tool names and descriptions and closes the connection. Saved server profiles persist names locally and protect executable paths and arguments with Windows DPAPI. Tool calls, remote transports and chat integration remain pending.

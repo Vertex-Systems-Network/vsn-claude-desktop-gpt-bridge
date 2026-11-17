@@ -31,4 +31,7 @@ export const projectChannels = {
 export const mcpChannels = {
   choose: 'deskagent:mcp-choose',
   discover: 'deskagent:mcp-discover',
+  listProfiles: 'deskagent:mcp-list-profiles',
+  saveProfile: 'deskagent:mcp-save-profile',
+  removeProfile: 'deskagent:mcp-remove-profile',
 } as const

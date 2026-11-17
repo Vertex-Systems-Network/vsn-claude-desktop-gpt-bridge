@@ -26,6 +26,9 @@ const bridge: DesktopBridge = {
   listProjects: () => ipcRenderer.invoke(projectChannels.list),
   saveProject: (input) => ipcRenderer.invoke(projectChannels.save, input),
   deleteProject: (id) => ipcRenderer.invoke(projectChannels.delete, id),
+  listMcpProfiles: () => ipcRenderer.invoke(mcpChannels.listProfiles),
+  saveMcpProfile: (profile) => ipcRenderer.invoke(mcpChannels.saveProfile, profile),
+  removeMcpProfile: (id) => ipcRenderer.invoke(mcpChannels.removeProfile, id),
   chooseMcpExecutable: () => ipcRenderer.invoke(mcpChannels.choose),
   discoverMcp: (probe) => ipcRenderer.invoke(mcpChannels.discover, probe),
   async getRuntimeInfo() {

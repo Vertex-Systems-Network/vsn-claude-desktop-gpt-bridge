@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { realpath, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { formatChatExport } from './storage/export'
 import { isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -10,6 +10,7 @@ import { Projects } from './storage/projects'
 import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
 import { z } from 'zod'
+import { McpProfiles } from './mcp/profiles'
 import { discoverMcpTools, resolveMcpExecutable } from './mcp/discovery'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
@@ -229,6 +230,33 @@ async function start() {
     }
     return chat.send(model, prompt.trim(), { name: value.parts.join('/'), text })
   }, 3)
+  let mcpProfiles: McpProfiles | undefined
+  const profileStorage = () => {
+    mcpProfiles ??= new McpProfiles(smoke ? ':memory:' : join(app.getPath('userData'), 'mcp.sqlite3'))
+    return mcpProfiles
+  }
+  if (smoke) {
+    const directory = await mkdtemp(join(app.getPath('temp'), 'deskagent-mcp-'))
+    try {
+      const path = join(directory, 'profiles.sqlite3')
+      const initial = new McpProfiles(path)
+      try { initial.save({ name: 'Smoke server', executable: 'fixture.exe', args: ['fixture'] }) }
+      finally { initial.close() }
+      const reopened = new McpProfiles(path)
+      try {
+        const [stored] = reopened.list()
+        if (stored?.name !== 'Smoke server' || stored.args[0] !== 'fixture') {
+          throw new Error('DeskAgent MCP profile reopen smoke failed')
+        }
+        reopened.save({ ...stored, name: 'Renamed server' })
+        if (reopened.list()[0]?.name !== 'Renamed server' || !reopened.remove(stored.id) || reopened.list().length) {
+          throw new Error('DeskAgent MCP profile CRUD smoke failed')
+        }
+      } finally { reopened.close() }
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  }
+  handleRequest(mcpChannels.listProfiles, () => profileStorage().list())
+  handleRequest(mcpChannels.removeProfile, (value) => profileStorage().remove(z.uuid().parse(value)), 1)
   let discoveryBusy = false
   handleRequest(mcpChannels.choose, async () => {
     if (!mainWindow || smoke) return null
@@ -240,8 +268,14 @@ async function start() {
   })
   const mcpProbe = z.strictObject({
     executable: z.string().min(1).max(32767),
-    args: z.array(z.string().max(1024).refine((value) => !value.includes('\0'))).max(20),
+    args: z.array(z.string().max(1024).refine((value) => !value.includes('\0') && !value.includes('\r') && !value.includes('\n'))).max(20),
   })
+  const profileInput = mcpProbe.extend({ id: z.uuid().optional(), name: z.string().trim().min(1).max(80) })
+  handleRequest(mcpChannels.saveProfile, async (value) => {
+    const input = profileInput.parse(value)
+    const executable = await resolveMcpExecutable(input.executable)
+    return profileStorage().save({ ...input, executable })
+  }, 1)
   handleRequest(mcpChannels.discover, async (value) => {
     if (!mainWindow || discoveryBusy || smoke) return null
     const config = mcpProbe.parse(value)
@@ -284,9 +318,10 @@ async function start() {
         for (let attempt = 0; attempt < 40 && !document.querySelector('main h1'); attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
+        const profiles = await window.deskAgent.listMcpProfiles();
         const projects = await window.deskAgent.listProjects();
         const chat = await window.deskAgent.loadChatModels();
-        return projects.length === 0 && !!document.querySelector('#projects-heading') && chat.models.length === 0 && chat.error.includes('CHAT_AUTH_REQUIRED') &&
+        return profiles.length === 0 && projects.length === 0 && !!document.querySelector('#projects-heading') && chat.models.length === 0 && chat.error.includes('CHAT_AUTH_REQUIRED') &&
           !!document.querySelector('#mcp-heading') && !!document.querySelector('#chat-prompt') && info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
           Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'verifiedModel', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
