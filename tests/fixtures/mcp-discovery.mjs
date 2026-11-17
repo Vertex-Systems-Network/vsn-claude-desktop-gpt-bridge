@@ -13,7 +13,10 @@ for await (const line of input) {
     }
   }
   if (request.method === 'tools/list') {
-    result = { tools: [{ name: 'fixture_tool', description: 'A local fixture', inputSchema: { type: 'object' } }] }
+    result = { tools: [{ name: 'fixture_tool', description: 'A local fixture', inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } }] }
+  }
+  if (request.method === 'tools/call') {
+    result = { content: [{ type: 'text', text: request.params.arguments.text }] }
   }
   const reply = result ? { result } : { error: { code: -32601, message: 'Method not found' } }
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, ...reply }) + '\n')

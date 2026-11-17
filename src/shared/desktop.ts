@@ -1,4 +1,4 @@
-import type { McpDiscovery, McpProbe, McpProfile, McpProfileInput } from './mcp'
+import type { McpCall, McpCallResult, McpDiscovery, McpProbe, McpProfile, McpProfileInput } from './mcp'
 import type { Project, ProjectAttachment, ProjectInput, ProjectListing } from './project'
 import type { ChatChange, ChatSnapshot, SavedChat } from './chat'
 import type { AccountStatus } from './account'
@@ -40,6 +40,7 @@ export interface DesktopBridge {
   saveMcpProfile(profile: McpProfileInput): Promise<McpProfile>
   removeMcpProfile(id: string): Promise<boolean>
   chooseMcpExecutable(): Promise<string | null>
+  callMcp(call: McpCall): Promise<McpCallResult | null>
   discoverMcp(probe: McpProbe): Promise<McpDiscovery | null>
   getRuntimeInfo(): Promise<RuntimeInfo>
 }

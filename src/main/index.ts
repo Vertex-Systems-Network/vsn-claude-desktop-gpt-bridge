@@ -11,7 +11,7 @@ import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
 import { z } from 'zod'
 import { McpProfiles } from './mcp/profiles'
-import { discoverMcpTools, resolveMcpExecutable } from './mcp/discovery'
+import { callMcpTool, discoverMcpTools, resolveMcpExecutable } from './mcp/discovery'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
 
@@ -257,7 +257,7 @@ async function start() {
   }
   handleRequest(mcpChannels.listProfiles, () => profileStorage().list())
   handleRequest(mcpChannels.removeProfile, (value) => profileStorage().remove(z.uuid().parse(value)), 1)
-  let discoveryBusy = false
+  let mcpBusy = false
   handleRequest(mcpChannels.choose, async () => {
     if (!mainWindow || smoke) return null
     const selection = await dialog.showOpenDialog(mainWindow, {
@@ -277,9 +277,9 @@ async function start() {
     return profileStorage().save({ ...input, executable })
   }, 1)
   handleRequest(mcpChannels.discover, async (value) => {
-    if (!mainWindow || discoveryBusy || smoke) return null
+    if (!mainWindow || mcpBusy || smoke) return null
     const config = mcpProbe.parse(value)
-    discoveryBusy = true
+    mcpBusy = true
     try {
       const executable = await resolveMcpExecutable(config.executable)
       const approval = await dialog.showMessageBox(mainWindow, {
@@ -290,7 +290,25 @@ async function start() {
       })
       if (approval.response !== 0 || !mainWindow) return null
       return await discoverMcpTools({ executable, args: config.args })
-    } finally { discoveryBusy = false }
+    } finally { mcpBusy = false }
+  }, 1)
+  const mcpCall = mcpProbe.extend({ tool: z.string().min(1).max(128), argumentsJson: z.string().max(8_000) })
+  handleRequest(mcpChannels.call, async (value) => {
+    if (!mainWindow || mcpBusy || smoke) return null
+    const config = mcpCall.parse(value)
+    const args = z.record(z.string(), z.unknown()).parse(JSON.parse(config.argumentsJson))
+    mcpBusy = true
+    try {
+      const executable = await resolveMcpExecutable(config.executable)
+      const approval = await dialog.showMessageBox(mainWindow, {
+        type: 'warning', buttons: ['Run tool once', 'Cancel'], defaultId: 1, cancelId: 1,
+        message: 'Run this local MCP tool?',
+        detail: 'This runs a local program with your Windows user permissions. Review the arguments before proceeding.\n\n' +
+          JSON.stringify({ executable, launchArguments: config.args, tool: config.tool, toolArguments: args }, null, 2),
+      })
+      if (approval.response !== 0 || !mainWindow) return null
+      return await callMcpTool({ executable, args: config.args }, config.tool, args)
+    } finally { mcpBusy = false }
   }, 1)
   handleRequest(accountChannels.status, () => account.getStatus())
   handleRequest(accountChannels.signIn, () => chat.busy ? account.getStatus() : account.signIn(false))

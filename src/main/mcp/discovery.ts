@@ -1,6 +1,8 @@
 import { realpath, stat } from 'node:fs/promises'
 import { extname, isAbsolute } from 'node:path'
-import type { McpDiscovery, McpProbe } from '../../shared/mcp'
+import { Ajv2020 } from 'ajv/dist/2020.js'
+import type { Client as McpClient } from '@modelcontextprotocol/client'
+import type { McpCallResult, McpDiscovery, McpProbe } from '../../shared/mcp'
 
 export async function resolveMcpExecutable(path: string): Promise<string> {
   if (!isAbsolute(path) || /^[\\/]{2}/.test(path)) throw new Error('Select a local executable.')
@@ -12,7 +14,7 @@ export async function resolveMcpExecutable(path: string): Promise<string> {
   return command
 }
 
-export async function discoverMcpTools(config: McpProbe): Promise<McpDiscovery> {
+async function withMcpClient<T>(config: McpProbe, operate: (client: McpClient) => Promise<T>): Promise<T> {
   const command = await resolveMcpExecutable(config.executable)
   const { Client } = await import('@modelcontextprotocol/client')
   const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio')
@@ -21,22 +23,43 @@ export async function discoverMcpTools(config: McpProbe): Promise<McpDiscovery> 
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('MCP discovery timed out.')), 10_000)
+      timer = setTimeout(() => reject(new Error('The MCP request timed out.')), 10_000)
     })
-    const operation = async (): Promise<McpDiscovery> => {
+    const operation = async () => {
       await client.connect(transport)
-      if (!client.getServerCapabilities()?.tools) return { tools: [], truncated: false }
-      const result = await client.listTools()
-      return {
-        tools: result.tools.slice(0, 100).map(({ name, description }) => ({
-          name: name.slice(0, 128), description: (description ?? '').slice(0, 2_000),
-        })),
-        truncated: result.tools.length > 100 || Boolean(result.nextCursor),
-      }
+      return operate(client)
     }
     return await Promise.race([operation(), deadline])
   } finally {
     clearTimeout(timer)
     await client.close()
   }
+}
+
+export async function discoverMcpTools(config: McpProbe): Promise<McpDiscovery> {
+  return withMcpClient(config, async (client) => {
+      if (!client.getServerCapabilities()?.tools) return { tools: [], truncated: false }
+      const result = await client.listTools()
+      return {
+        tools: result.tools.slice(0, 100).map(({ name, description }) => ({
+          name, description: (description ?? '').slice(0, 2_000),
+        })),
+        truncated: result.tools.length > 100 || Boolean(result.nextCursor),
+      }
+  })
+}
+
+export async function callMcpTool(config: McpProbe, tool: string, args: Record<string, unknown>): Promise<McpCallResult> {
+  return withMcpClient(config, async (client) => {
+    if (!client.getServerCapabilities()?.tools) throw new Error('This MCP server has no tools.')
+    const listed = await client.listTools()
+    const advertised = listed.tools.slice(0, 100).find(({ name }) => name === tool)
+    if (!advertised) throw new Error('The selected tool is no longer available.')
+    const validator = new Ajv2020({ strict: false, validateFormats: false })
+    if (!validator.compile(advertised.inputSchema)(args)) throw new Error('Arguments do not match the tool schema.')
+    const result = await client.callTool({ name: tool, arguments: args })
+    const output = (result.content ?? []).flatMap((item) => item.type === 'text' ? [item.text] : []).join('\n')
+    const text = output || (result.structuredContent ? JSON.stringify(result.structuredContent, null, 2) : 'No text output.')
+    return { text: text.slice(0, 16_000), failed: Boolean(result.isError), truncated: text.length > 16_000 }
+  })
 }

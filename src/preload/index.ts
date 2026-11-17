@@ -30,6 +30,7 @@ const bridge: DesktopBridge = {
   saveMcpProfile: (profile) => ipcRenderer.invoke(mcpChannels.saveProfile, profile),
   removeMcpProfile: (id) => ipcRenderer.invoke(mcpChannels.removeProfile, id),
   chooseMcpExecutable: () => ipcRenderer.invoke(mcpChannels.choose),
+  callMcp: (call) => ipcRenderer.invoke(mcpChannels.call, call),
   discoverMcp: (probe) => ipcRenderer.invoke(mcpChannels.discover, probe),
   async getRuntimeInfo() {
     return ipcRenderer.invoke(runtimeChannel)
