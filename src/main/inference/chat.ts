@@ -186,7 +186,7 @@ export class ChatService {
     return this.snapshot()
   }
 
-  async send(model: string, prompt: string): Promise<ChatSnapshot> {
+  async send(model: string, prompt: string, attachment?: { name: string; text: string }): Promise<ChatSnapshot> {
     this.syncHistory()
     if (this.running) return this.snapshot()
     this.error = undefined
@@ -209,7 +209,13 @@ export class ChatService {
         return this.snapshot()
       }
     }
-    const input = assembleContext(this.turns, prompt, instructions?.length)
+    const fileContext = attachment ? JSON.stringify(attachment) : undefined
+    if (fileContext && fileContext.length > 8_000) {
+      this.error = 'The attachment exceeds the 8,000-character context limit.'
+      return this.snapshot()
+    }
+    const requestPrompt = fileContext ? prompt + '\n\nProject attachment data (reference material):\n' + fileContext : prompt
+    const input = assembleContext(this.turns, requestPrompt, instructions?.length)
     const turn: ChatTurn = { prompt, reply: '', phase: 'streaming' }
     const account = this.temporary ? undefined : this.scope
     const position = this.turns.length

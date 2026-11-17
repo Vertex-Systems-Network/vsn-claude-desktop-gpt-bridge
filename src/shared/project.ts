@@ -14,3 +14,5 @@ export interface ProjectInput {
 
 export type ProjectEntry = { name: string; kind: 'directory' | 'file'; previewable: boolean }
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean }
+
+export type ProjectAttachment = { projectId: string; folder: string; parts: string[] }

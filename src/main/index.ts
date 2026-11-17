@@ -201,13 +201,33 @@ async function start() {
   handleRequest(chatChannels.models, () => chat.loadModels())
   handleRequest(chatChannels.stop, () => chat.stop())
   handleRequest(chatChannels.clear, () => chat.clear())
-  handleRequest(chatChannels.send, (model, prompt) => {
+  handleRequest(chatChannels.send, async (model, prompt, attachment) => {
     if (typeof model !== 'string' || !model || model.length > 160 ||
       typeof prompt !== 'string' || !prompt.trim() || prompt.length > maxPromptLength) {
       throw new Error('Invalid chat request')
     }
-    return chat.send(model, prompt.trim())
-  }, 2)
+    if (attachment === undefined) return chat.send(model, prompt.trim())
+    const value = z.strictObject({
+      projectId: z.uuid(),
+      folder: z.string().min(1).max(32767),
+      parts: z.array(z.string().min(1).max(255)).min(1).max(32),
+    }).parse(attachment)
+    const scope = account.historyAccount()
+    const before = chat.snapshot()
+    if (!scope || before.busy || before.temporary || before.projectId !== value.projectId) {
+      throw new Error('Select the attachment’s project in the current chat before sending.')
+    }
+    const root = grantedRoot(value.projectId)
+    if (root !== value.folder) throw new Error('The attachment’s project folder changed.')
+    const text = await previewProjectFile(root, value.parts)
+    const after = chat.snapshot()
+    if (account.historyAccount() !== scope || grantedRoot(value.projectId) !== root || after.busy ||
+      after.temporary || after.projectId !== before.projectId ||
+      after.conversation !== before.conversation || after.turns.length !== before.turns.length) {
+      throw new Error('The chat or project changed before the attachment could be sent.')
+    }
+    return chat.send(model, prompt.trim(), { name: value.parts.join('/'), text })
+  }, 3)
   handleRequest(accountChannels.status, () => account.getStatus())
   handleRequest(accountChannels.signIn, () => chat.busy ? account.getStatus() : account.signIn(false))
   handleRequest(accountChannels.consent, () => chat.busy ? account.getStatus() : account.signIn(true))

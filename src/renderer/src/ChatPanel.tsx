@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
-import type { Project } from '../../shared/project'
+import type { Project, ProjectAttachment } from '../../shared/project'
 import type { FormEvent } from 'react'
 import { maxPromptLength } from '../../shared/chat'
 import type { ChatChange, ChatSnapshot, SavedChat } from '../../shared/chat'
 
-export function ChatPanel({ onBusy, projects }: { onBusy: (busy: boolean) => void; projects: Project[] }) {
+export function ChatPanel({ onBusy, projects, attachment, onClearAttachment }: {
+  onBusy: (busy: boolean) => void
+  projects: Project[]
+  attachment?: ProjectAttachment
+  onClearAttachment: () => void
+}) {
   const bridge = window.deskAgent
   const [chat, setChat] = useState<ChatSnapshot>({ models: [], turns: [], busy: false })
   const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open' | 'change'>()
@@ -18,6 +23,8 @@ export function ChatPanel({ onBusy, projects }: { onBusy: (busy: boolean) => voi
   const [notice, setNotice] = useState('')
   const selected = chat.models.find((option) => option.slug === model)?.slug ?? ''
   const busy = Boolean(pending || chat.busy)
+  const attachmentMatches = !attachment || (!chat.temporary && attachment.projectId === chat.projectId && projects.some(({ id, folder }) =>
+    id === attachment.projectId && folder === attachment.folder))
   const visibleChats = matches ?? (showArchived ? chat.archived : chat.saved) ?? []
 
   useEffect(() => { onBusy(busy) }, [busy, onBusy])
@@ -44,9 +51,14 @@ export function ChatPanel({ onBusy, projects }: { onBusy: (busy: boolean) => voi
       if (operation === 'clear' || operation === 'open' || operation === 'change') setRename(undefined)
       if (operation === 'change') setMatches(undefined)
       if (operation === 'models') setModel(next.models.find(({ slug }) => slug === model)?.slug ?? next.models[0]?.slug ?? '')
-      if (operation === 'send' && next.turns.length > chat.turns.length) setPrompt('')
+      if ((operation === 'clear' || operation === 'open') && !next.historyError) onClearAttachment()
+      if (operation === 'send' && next.turns.length > chat.turns.length) {
+        setPrompt('')
+        onClearAttachment()
+      }
     } catch {
-      setNotice('The desktop chat request failed. You can try again.')
+      setNotice(operation === 'send' && attachment ? 'Could not send the attachment. Check the project’s folder access and file, then try again.' :
+        'The desktop chat request failed. You can try again.')
     } finally {
       setPending(undefined)
     }
@@ -78,7 +90,7 @@ export function ChatPanel({ onBusy, projects }: { onBusy: (busy: boolean) => voi
 
   function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (selected && prompt.trim()) void run('send', () => bridge.sendChat(selected, prompt))
+    if (selected && prompt.trim() && attachmentMatches) void run('send', () => bridge.sendChat(selected, prompt, attachment))
   }
 
   return (
@@ -213,12 +225,18 @@ export function ChatPanel({ onBusy, projects }: { onBusy: (busy: boolean) => voi
       {notice && <p className="mt-4" role="status">{notice}</p>}
       {chat.error && <p className="mt-4" role="alert">{chat.error}</p>}
       <form className="mt-5 grid gap-3" onSubmit={send}>
+        {attachment && <div className="grid gap-2 rounded border p-3">
+          <p className="break-all">Attachment: {attachment.parts.join('/')}</p>
+          <p className="muted">{attachmentMatches ? 'The file text goes to OpenAI with this message.' :
+            'Select the same project in this chat, or remove the attachment.'}</p>
+          <button type="button" className="justify-self-start" disabled={busy} onClick={onClearAttachment}>Remove attachment</button>
+        </div>}
         <label htmlFor="chat-prompt">Message</label>
         <textarea id="chat-prompt" rows={4} className="w-full rounded border bg-transparent p-3"
           disabled={busy || chat.activeChat?.archived || !selected} value={prompt} maxLength={maxPromptLength}
           onChange={(event) => setPrompt(event.target.value)} />
         <div className="flex gap-3">
-          <button type="submit" disabled={busy || chat.activeChat?.archived || !selected || !prompt.trim()}>Send</button>
+          <button type="submit" disabled={busy || chat.activeChat?.archived || !selected || !prompt.trim() || !attachmentMatches}>Send</button>
           {(pending === 'send' || chat.turns.at(-1)?.phase === 'streaming') && (
             <button type="button" onClick={() => {
               void bridge.stopChat().catch(() => setNotice('The stop request failed.'))

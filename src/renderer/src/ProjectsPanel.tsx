@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ProjectFiles } from './ProjectFiles'
 import type { FormEvent } from 'react'
-import type { Project, ProjectInput } from '../../shared/project'
+import type { Project, ProjectAttachment, ProjectInput } from '../../shared/project'
 
 const blank: ProjectInput = { name: '', instructions: '', chooseFolder: true }
 
-export function ProjectsPanel({ onProjects }: { onProjects: (projects: Project[]) => void }) {
+export function ProjectsPanel({ onProjects, onAttach }: { onProjects: (projects: Project[]) => void; onAttach: (attachment: ProjectAttachment) => void }) {
   const bridge = window.deskAgent
   const [projects, setProjects] = useState<Project[]>()
   const [filesProject, setFilesProject] = useState<string>()
@@ -103,7 +103,7 @@ export function ProjectsPanel({ onProjects }: { onProjects: (projects: Project[]
             }}>Edit</button>
             <button type="button" disabled={busy || !!draft} onClick={() => { void remove(project) }}>Remove</button>
           </div>
-          {filesProject === project.id && <ProjectFiles key={project.folder} project={project} />}
+          {filesProject === project.id && <ProjectFiles key={project.folder} project={project} onAttach={onAttach} />}
         </li>)}
       </ul>}
     </section>

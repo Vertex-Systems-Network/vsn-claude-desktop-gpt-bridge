@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import type { Project, ProjectListing } from '../../shared/project'
+import type { Project, ProjectAttachment, ProjectListing } from '../../shared/project'
 
-export function ProjectFiles({ project }: { project: Project }) {
+export function ProjectFiles({ project, onAttach }: { project: Project; onAttach: (attachment: ProjectAttachment) => void }) {
   const bridge = window.deskAgent
   const [path, setPath] = useState<string[]>([])
   const [listing, setListing] = useState<ProjectListing>()
   const [preview, setPreview] = useState<{ name: string; text: string }>()
   const [busy, setBusy] = useState(false)
+  const [attachmentStatus, setAttachmentStatus] = useState('')
   const [error, setError] = useState('')
 
   async function run(operation: () => Promise<void>) {
@@ -62,11 +63,19 @@ export function ProjectFiles({ project }: { project: Project }) {
           </li>)}
         </ul>
       </>}
+      {attachmentStatus && <p role="status">{attachmentStatus}</p>}
       {error && <p role="alert">{error}</p>}
       {preview && <div className="grid gap-2">
         <div className="flex items-center justify-between gap-3">
           <strong className="break-all">{preview.name}</strong>
-          <button type="button" onClick={() => setPreview(undefined)}>Close preview</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={() => {
+              onAttach({ projectId: project.id, folder: project.folder, parts: [...path, preview.name] })
+              setAttachmentStatus('File selected. Link this project in Chat workspace to send it.')
+              document.getElementById('chat-heading')?.scrollIntoView({ block: 'start' })
+            }}>Attach to chat</button>
+            <button type="button" onClick={() => setPreview(undefined)}>Close preview</button>
+          </div>
         </div>
         <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border p-3">{preview.text || 'Empty file'}</pre>
       </div>}

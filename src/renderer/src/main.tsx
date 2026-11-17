@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Project } from '../../shared/project'
+import type { Project, ProjectAttachment } from '../../shared/project'
 import type { DesktopBridge, RuntimeInfo } from '../../shared/desktop'
 import './styles.css'
 import { AccountPanel } from './AccountPanel'
@@ -29,6 +29,7 @@ function Workspace() {
   const { theme, setTheme } = useAppearance()
   const [diagnostics, setDiagnostics] = useState<Diagnostics>({ status: 'loading' })
   const [chatSession, setChatSession] = useState(0)
+  const [attachment, setAttachment] = useState<ProjectAttachment>()
   const [projects, setProjects] = useState<Project[]>([])
   const [chatBusy, setChatBusy] = useState(false)
   const [requestId, setRequestId] = useState(0)
@@ -53,9 +54,9 @@ function Workspace() {
         </button>
       </header>
       <main className="mx-auto max-w-3xl px-7 py-14">
-        <AccountPanel chatBusy={chatBusy} onDisconnect={() => setChatSession((id) => id + 1)} />
-        <ChatPanel key={chatSession} onBusy={setChatBusy} projects={projects} />
-        <ProjectsPanel onProjects={setProjects} />
+        <AccountPanel chatBusy={chatBusy} onDisconnect={() => { setAttachment(undefined); setChatSession((id) => id + 1) }} />
+        <ChatPanel key={chatSession} onBusy={setChatBusy} projects={projects} attachment={attachment} onClearAttachment={() => setAttachment(undefined)} />
+        <ProjectsPanel onProjects={setProjects} onAttach={(file) => { if (!chatBusy) setAttachment(file) }} />
         <h2 className="mt-12 text-xl font-semibold">Desktop diagnostics</h2>
         <p className="mt-3 muted">Check the connection between the desktop window and its local runtime.</p>
         <section className="mt-8 rounded-xl border p-6" aria-label="Runtime status" aria-live="polite">
