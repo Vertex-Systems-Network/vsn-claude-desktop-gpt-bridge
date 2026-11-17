@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { McpCallResult, McpDiscovery, McpProfile } from '../../shared/mcp'
 
-export function McpPanel() {
+export function McpPanel({ chatBusy, onUseOutput }: {
+  chatBusy: boolean
+  onUseOutput: (tool: string, result: McpCallResult) => boolean
+}) {
   const bridge = window.deskAgent
   const [profiles, setProfiles] = useState<McpProfile[]>([])
   const [profileId, setProfileId] = useState('')
@@ -172,6 +175,11 @@ export function McpPanel() {
         {toolResult && <div className="grid gap-2" aria-live="polite">
           <strong>{toolResult.failed ? 'Tool reported an error' : 'Tool output'}</strong>
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all">{toolResult.text}</pre>
+          <button type="button" disabled={chatBusy || busy || toolResult.failed} className="justify-self-start"
+            onClick={() => {
+              setError(onUseOutput(tool, toolResult) ? '' : 'The result does not fit in the chat draft. Copy a smaller excerpt.')
+            }}>Add output to chat draft</button>
+          <p className="muted">Review the draft before sending. Sent text is included in normal chat history.</p>
           {toolResult.truncated && <p className="muted">Output shortened to 16,000 characters.</p>}
         </div>}
       </div>}

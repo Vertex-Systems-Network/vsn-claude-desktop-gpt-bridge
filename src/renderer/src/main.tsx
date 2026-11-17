@@ -8,6 +8,7 @@ import './styles.css'
 import { AccountPanel } from './AccountPanel'
 import { ProjectsPanel } from './ProjectsPanel'
 import { McpPanel } from './McpPanel'
+import { appendMcpOutput } from '../../shared/mcp-context'
 import { ChatPanel } from './ChatPanel'
 
 declare global {
@@ -30,6 +31,7 @@ function Workspace() {
   const { theme, setTheme } = useAppearance()
   const [diagnostics, setDiagnostics] = useState<Diagnostics>({ status: 'loading' })
   const [chatSession, setChatSession] = useState(0)
+  const [prompt, setPrompt] = useState('')
   const [attachment, setAttachment] = useState<ProjectAttachment>()
   const [projects, setProjects] = useState<Project[]>([])
   const [chatBusy, setChatBusy] = useState(false)
@@ -55,9 +57,16 @@ function Workspace() {
         </button>
       </header>
       <main className="mx-auto max-w-3xl px-7 py-14">
-        <AccountPanel chatBusy={chatBusy} onDisconnect={() => { setAttachment(undefined); setChatSession((id) => id + 1) }} />
-        <ChatPanel key={chatSession} onBusy={setChatBusy} projects={projects} attachment={attachment} onClearAttachment={() => setAttachment(undefined)} />
-        <McpPanel />
+        <AccountPanel chatBusy={chatBusy} onDisconnect={() => { setAttachment(undefined); setPrompt(''); setChatSession((id) => id + 1) }} />
+        <ChatPanel key={chatSession} onBusy={setChatBusy} projects={projects} prompt={prompt} onPrompt={setPrompt} attachment={attachment} onClearAttachment={() => setAttachment(undefined)} />
+        <McpPanel chatBusy={chatBusy} onUseOutput={(tool, result) => {
+          if (chatBusy) return false
+          const next = appendMcpOutput(prompt, tool, result.text, result.truncated)
+          if (!next) return false
+          setPrompt(next)
+          document.getElementById('chat-prompt')?.focus()
+          return true
+        }} />
         <ProjectsPanel onProjects={setProjects} onAttach={(file) => { if (!chatBusy) setAttachment(file) }} />
         <h2 className="mt-12 text-xl font-semibold">Desktop diagnostics</h2>
         <p className="mt-3 muted">Check the connection between the desktop window and its local runtime.</p>

@@ -4,9 +4,11 @@ import type { FormEvent } from 'react'
 import { maxPromptLength } from '../../shared/chat'
 import type { ChatChange, ChatSnapshot, SavedChat } from '../../shared/chat'
 
-export function ChatPanel({ onBusy, projects, attachment, onClearAttachment }: {
+export function ChatPanel({ onBusy, projects, attachment, onClearAttachment, prompt, onPrompt: setPrompt }: {
   onBusy: (busy: boolean) => void
   projects: Project[]
+  prompt: string
+  onPrompt: (prompt: string) => void
   attachment?: ProjectAttachment
   onClearAttachment: () => void
 }) {
@@ -14,7 +16,6 @@ export function ChatPanel({ onBusy, projects, attachment, onClearAttachment }: {
   const [chat, setChat] = useState<ChatSnapshot>({ models: [], turns: [], busy: false })
   const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open' | 'change'>()
   const [model, setModel] = useState('')
-  const [prompt, setPrompt] = useState('')
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [rename, setRename] = useState<string>()
@@ -51,7 +52,10 @@ export function ChatPanel({ onBusy, projects, attachment, onClearAttachment }: {
       if (operation === 'clear' || operation === 'open' || operation === 'change') setRename(undefined)
       if (operation === 'change') setMatches(undefined)
       if (operation === 'models') setModel(next.models.find(({ slug }) => slug === model)?.slug ?? next.models[0]?.slug ?? '')
-      if ((operation === 'clear' || operation === 'open') && !next.historyError) onClearAttachment()
+      if ((operation === 'clear' || operation === 'open') && !next.historyError) {
+        setPrompt('')
+        onClearAttachment()
+      }
       if (operation === 'send' && next.turns.length > chat.turns.length) {
         setPrompt('')
         onClearAttachment()
