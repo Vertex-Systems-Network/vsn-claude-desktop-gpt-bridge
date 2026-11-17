@@ -17,3 +17,5 @@ The [streaming chat run](https://github.com/Vertex-Systems-Network/vsn-claude-de
 The [SQLite reopen run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43978630120) passed lint, type checks, all 23 tests, the production build, and the Windows SQLite/IPC/DPAPI smoke test. The search/export follow-up adds literal search and export-format fixtures.
 
 The [search and export run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43978864814) passed 24 tests and the native Windows smoke test. Lifecycle coverage adds version 1 migration, account-scoped rename/archive/restore/delete, and temporary inference with zero saved conversations.
+
+The [chat lifecycle run](https://github.com/Vertex-Systems-Network/vsn-claude-desktop-gpt-bridge/actions/runs/43985246539) passed 27 tests and the native Windows smoke test. Projects adds a SQLite reopen/CRUD test and a renderer-to-main Projects IPC check in the native smoke test.

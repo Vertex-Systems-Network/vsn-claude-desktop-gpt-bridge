@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { accountChannels, chatChannels, runtimeChannel } from '../shared/channel'
+import { accountChannels, chatChannels, projectChannels, runtimeChannel } from '../shared/channel'
 import type { DesktopBridge } from '../shared/desktop'
 
 const bridge: DesktopBridge = {
@@ -19,6 +19,9 @@ const bridge: DesktopBridge = {
   changeChat: (change) => ipcRenderer.invoke(chatChannels.change, change),
   openChat: (id) => ipcRenderer.invoke(chatChannels.open, id),
   clearChat: () => ipcRenderer.invoke(chatChannels.clear),
+  listProjects: () => ipcRenderer.invoke(projectChannels.list),
+  saveProject: (input) => ipcRenderer.invoke(projectChannels.save, input),
+  deleteProject: (id) => ipcRenderer.invoke(projectChannels.delete, id),
   async getRuntimeInfo() {
     return ipcRenderer.invoke(runtimeChannel)
   },

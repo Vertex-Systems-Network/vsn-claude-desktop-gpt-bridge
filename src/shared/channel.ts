@@ -19,3 +19,8 @@ export const chatChannels = {
   search: 'deskagent:chat-search',
   export: 'deskagent:chat-export',
 } as const
+export const projectChannels = {
+  list: 'deskagent:project-list',
+  save: 'deskagent:project-save',
+  delete: 'deskagent:project-delete',
+} as const

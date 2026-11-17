@@ -1,10 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { realpath, stat, writeFile } from 'node:fs/promises'
 import { formatChatExport } from './storage/export'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { accountChannels, chatChannels, runtimeChannel } from '../shared/channel'
+import { accountChannels, chatChannels, projectChannels, runtimeChannel } from '../shared/channel'
 import { maxPromptLength } from '../shared/chat'
+import { Projects } from './storage/projects'
 import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
 import { z } from 'zod'
@@ -67,6 +68,50 @@ async function start() {
     if (smoke) throw error
     console.error('DeskAgent could not open local chat history.', error instanceof Error ? error.name : 'Unknown error')
   }
+  let projects: Projects | undefined
+  try {
+    projects = new Projects(smoke ? ':memory:' : join(app.getPath('userData'), 'projects.sqlite3'))
+  } catch (error) {
+    if (smoke) throw error
+    console.error('DeskAgent could not open projects storage.', error instanceof Error ? error.name : 'Unknown error')
+  }
+  const projectStorage = () => {
+    if (!projects) throw new Error('Local project storage is unavailable.')
+    return projects
+  }
+  const projectInput = z.strictObject({
+    id: z.uuid().optional(),
+    name: z.string().trim().min(1).max(120),
+    instructions: z.string().max(12_000),
+    chooseFolder: z.boolean(),
+  })
+  handleRequest(projectChannels.list, () => projectStorage().list())
+  handleRequest(projectChannels.save, async (value) => {
+    const input = projectInput.parse(value)
+    const storage = projectStorage()
+    const current = input.id ? storage.get(input.id) : undefined
+    if (input.id && !current) throw new Error('Project no longer exists.')
+    let folder = current?.folder
+    if (!folder || input.chooseFolder) {
+      if (!mainWindow) return null
+      const selection = await dialog.showOpenDialog(mainWindow, {
+        title: 'Select a local project folder',
+        defaultPath: folder,
+        properties: ['openDirectory'],
+      })
+      const chosen = selection.filePaths[0]
+      if (selection.canceled || !chosen) return null
+      if (!isAbsolute(chosen) || /^[\\/]{2}/.test(chosen)) {
+        throw new Error('Choose a folder on a local drive.')
+      }
+      folder = await realpath(chosen)
+      if (/^[\\/]{2}/.test(folder) || !(await stat(folder)).isDirectory()) {
+        throw new Error('Choose a folder on a local drive.')
+      }
+    }
+    return storage.save({ name: input.name, instructions: input.instructions, folder }, input.id)
+  }, 1)
+  handleRequest(projectChannels.delete, (id) => projectStorage().delete(z.uuid().parse(id)), 1)
   const chat = new ChatService(() => account.chatAccessToken(), history, () => account.historyAccount())
   if (smoke && history) {
     const id = history.append('smoke-profile', undefined, 0, 'smoke-model', 'smoke prompt')
@@ -141,8 +186,9 @@ async function start() {
         for (let attempt = 0; attempt < 40 && !document.querySelector('main h1'); attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
+        const projects = await window.deskAgent.listProjects();
         const chat = await window.deskAgent.loadChatModels();
-        return chat.models.length === 0 && chat.error.includes('CHAT_AUTH_REQUIRED') &&
+        return projects.length === 0 && !!document.querySelector('#projects-heading') && chat.models.length === 0 && chat.error.includes('CHAT_AUTH_REQUIRED') &&
           !!document.querySelector('#chat-prompt') && info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
           Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'verifiedModel', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
