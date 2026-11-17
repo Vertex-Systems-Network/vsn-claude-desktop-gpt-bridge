@@ -21,3 +21,5 @@ In **Chat workspace**, choose **Load models**, select a model, and send a messag
 The smoke test launches Electron and verifies the built renderer's connection to the main process and a synthetic Windows credential encryption round trip. Run it in a Windows desktop session. See [feasibility](docs/FEASIBILITY.md), [progress](PROGRESS.md) and the [test report](TEST_REPORT.md).
 
 Use **Search saved chats** to find a conversation by title or message text. Export the open conversation from **Export Markdown** or **Export JSON**. Choose a destination in the Windows save dialog.
+
+Rename, archive, restore and delete directly from an open saved conversation. Archived conversations have their own filtered list and search. Temporary chats keep messages in memory and are discarded when you leave or quit. Sending still transmits the prompt and relevant temporary context to OpenAI.

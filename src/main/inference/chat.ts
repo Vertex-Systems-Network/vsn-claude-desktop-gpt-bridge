@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSnapshot, ChatTurn, SavedChat } from '../../shared/chat'
+import type { ChatChange, ChatMessage, ChatSnapshot, ChatTurn, SavedChat } from '../../shared/chat'
 import type { ChatHistory } from '../storage/history'
 import { fetchModels, PlanCheckError, streamText } from './plan-check'
 
@@ -42,6 +42,9 @@ export class ChatService {
   private conversation?: string
   private saved: ChatSnapshot['saved'] = []
   private historyError?: string
+  private archived: SavedChat[] = []
+  private activeChat?: ChatSnapshot['activeChat']
+  private temporary = false
 
   constructor(
     private readonly getAccess: () => Promise<string>,
@@ -56,6 +59,9 @@ export class ChatService {
     this.models = []
     this.turns = []
     this.saved = []
+    this.archived = []
+    this.activeChat = undefined
+    this.temporary = false
     this.conversation = undefined
     this.error = undefined
     this.historyError = undefined
@@ -63,26 +69,28 @@ export class ChatService {
     try {
       if (!this.history) throw new Error('Chat history unavailable')
       this.saved = this.history.list(scope)
+      this.archived = this.history.list(scope, true)
       const latest = this.saved[0]
       if (latest) {
         this.turns = this.history.read(scope, latest.id) ?? []
         this.conversation = latest.id
+        this.activeChat = this.history.details(scope, latest.id)
       }
     } catch {
       this.historyError = 'Local chat history could not be opened. Check storage and restart DeskAgent.'
     }
   }
 
-  find(query: string): SavedChat[] {
+  find(query: string, archived = false): SavedChat[] {
     this.syncHistory()
     if (!this.scope || !this.history || this.running) return []
-    return this.history.search(this.scope, query)
+    return this.history.search(this.scope, query, archived)
   }
 
   exportConversation(): { title: string; turns: ChatTurn[] } | undefined {
     this.syncHistory()
     if (!this.scope || !this.history || !this.conversation || this.running) return
-    const title = this.saved?.find(({ id }) => id === this.conversation)?.title ?? 'DeskAgent chat'
+    const title = this.activeChat?.title ?? 'DeskAgent chat'
     return { title, turns: this.turns.map((turn) => ({ ...turn })) }
   }
 
@@ -97,6 +105,8 @@ export class ChatService {
       }
       this.turns = turns
       this.conversation = id
+      this.activeChat = this.history.details(this.scope, id)
+      this.temporary = false
       this.error = undefined
       this.historyError = undefined
     } catch {
@@ -105,11 +115,37 @@ export class ChatService {
     return this.snapshot()
   }
 
+  change(change: ChatChange): ChatSnapshot {
+    this.syncHistory()
+    if (this.running) return this.snapshot()
+    if (change.action === 'temporary') {
+      this.clear()
+      this.temporary = true
+      return this.snapshot()
+    }
+    const { scope, history } = this
+    if (!scope || !history || change.id !== this.conversation) return this.snapshot()
+    try {
+      const changed = change.action === 'rename' ? history.rename(scope, change.id, change.title)
+        : change.action === 'delete' ? history.delete(scope, change.id)
+        : history.archive(scope, change.id, change.action === 'archive')
+      if (!changed) throw new Error('Conversation unavailable')
+      if (change.action === 'delete') this.clear()
+      else this.activeChat = history.details(scope, change.id)
+      this.saved = history.list(scope)
+      this.archived = history.list(scope, true)
+      this.historyError = undefined
+    } catch {
+      this.historyError = 'DeskAgent could not update the saved conversation.'
+    }
+    return this.snapshot()
+  }
+
   get busy() { return this.running }
 
   snapshot(): ChatSnapshot {
     this.syncHistory()
-    return { saved: this.saved, conversation: this.conversation, historyError: this.historyError, models: this.models, turns: this.turns.map((turn) => ({ ...turn })), busy: this.busy, error: this.error }
+    return { temporary: this.temporary, archived: this.archived, activeChat: this.activeChat, saved: this.saved, conversation: this.conversation, historyError: this.historyError, models: this.models, turns: this.turns.map((turn) => ({ ...turn })), busy: this.busy, error: this.error }
   }
 
   async loadModels(): Promise<ChatSnapshot> {
@@ -138,9 +174,13 @@ export class ChatService {
       this.error = this.turns.length >= 60 ? 'Start a new chat to send more messages.' : 'Reload models and choose an available model.'
       return this.snapshot()
     }
+    if (this.activeChat?.archived) {
+      this.error = 'Restore this chat before sending a message.'
+      return this.snapshot()
+    }
     const input = assembleContext(this.turns, prompt)
     const turn: ChatTurn = { prompt, reply: '', phase: 'streaming' }
-    const account = this.scope
+    const account = this.temporary ? undefined : this.scope
     const position = this.turns.length
     if (account) {
       try {
@@ -153,7 +193,10 @@ export class ChatService {
     }
     this.historyError = undefined
     if (account && this.history) {
-      try { this.saved = this.history.list(account) } catch { this.historyError = 'DeskAgent could not update the history list.' }
+      try {
+        this.saved = this.history.list(account)
+        if (this.conversation) this.activeChat = this.history.details(account, this.conversation)
+      } catch { this.historyError = 'DeskAgent could not update the history list.' }
     }
     this.turns.push(turn)
     const request = new AbortController()
@@ -195,6 +238,9 @@ export class ChatService {
       this.turns = []
       this.error = undefined
       this.conversation = undefined
+      this.activeChat = undefined
+      this.temporary = false
+      this.historyError = undefined
     }
     return this.snapshot()
   }

@@ -8,4 +8,4 @@
 | DA-004 | 3 | P0 | Plan check and streaming chat implemented. Live test pending | Eligible account consent | src/main/inference/plan-check.ts, tests/plan-check.test.ts |
 | DA-005 | 4–12 | P0/P1 | Pending | Prior phase acceptance | docs/REQUIREMENTS.md |
 
-Phase 4 in progress. Local SQLite history, recent chats, search and export are implemented. Temporary chats, rename, archive and deletion remain pending.
+Phase 4 in progress. Local SQLite history, recent chats, search and export are implemented. Temporary chats, rename, archive, restore and deletion implemented. Windows verification and live authorization are tracked separately.

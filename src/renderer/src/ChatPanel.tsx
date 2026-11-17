@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { maxPromptLength } from '../../shared/chat'
-import type { ChatSnapshot, SavedChat } from '../../shared/chat'
+import type { ChatChange, ChatSnapshot, SavedChat } from '../../shared/chat'
 
 export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
   const bridge = window.deskAgent
   const [chat, setChat] = useState<ChatSnapshot>({ models: [], turns: [], busy: false })
-  const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open'>()
+  const [pending, setPending] = useState<'models' | 'send' | 'clear' | 'open' | 'change'>()
   const [model, setModel] = useState('')
   const [prompt, setPrompt] = useState('')
   const [query, setQuery] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [rename, setRename] = useState<string>()
   const [matches, setMatches] = useState<SavedChat[]>()
   const [exporting, setExporting] = useState(false)
   const [notice, setNotice] = useState('')
   const selected = chat.models.find((option) => option.slug === model)?.slug ?? ''
   const busy = Boolean(pending || chat.busy)
+  const visibleChats = matches ?? (showArchived ? chat.archived : chat.saved) ?? []
 
   useEffect(() => { onBusy(busy) }, [busy, onBusy])
   useEffect(() => {
@@ -30,13 +33,15 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
     return () => { active = false; clearInterval(timer) }
   }, [bridge, pending])
 
-  async function run(operation: 'models' | 'send' | 'clear' | 'open', action: () => Promise<ChatSnapshot>) {
+  async function run(operation: 'models' | 'send' | 'clear' | 'open' | 'change', action: () => Promise<ChatSnapshot>) {
     if (busy) return
     setPending(operation)
     setNotice('')
     try {
       const next = await action()
       setChat(next)
+      if (operation === 'clear' || operation === 'open' || operation === 'change') setRename(undefined)
+      if (operation === 'change') setMatches(undefined)
       if (operation === 'models') setModel(next.models.find(({ slug }) => slug === model)?.slug ?? next.models[0]?.slug ?? '')
       if (operation === 'send' && next.turns.length > chat.turns.length) setPrompt('')
     } catch {
@@ -48,7 +53,7 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    try { setMatches(await bridge.searchChats(query)) }
+    try { setMatches(await bridge.searchChats(query, showArchived)) }
     catch { setNotice('DeskAgent could not search local history.') }
   }
 
@@ -61,6 +66,15 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
     finally { setExporting(false) }
   }
 
+  function changeChat(action: ChatChange) {
+    void run('change', () => bridge.changeChat(action))
+  }
+
+  function mayLeaveTemporary() {
+    return !chat.temporary || !(chat.turns.length || prompt.trim()) ||
+      window.confirm('Leave this temporary chat? Its messages and draft will be lost.')
+  }
+
   function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (selected && prompt.trim()) void run('send', () => bridge.sendChat(selected, prompt))
@@ -70,11 +84,28 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
     <section className="mt-8 rounded-xl border p-6" aria-labelledby="chat-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="chat-heading" className="text-2xl font-semibold">Chat workspace</h2>
-        <button type="button" disabled={busy || !chat.turns.length} onClick={() => {
-          void run('clear', bridge.clearChat)
-        }}>New chat</button>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" disabled={busy || (!chat.turns.length && !chat.temporary)} onClick={() => {
+            if (!mayLeaveTemporary()) return
+            setPrompt('')
+            void run('clear', bridge.clearChat)
+          }}>New chat</button>
+          <button type="button" disabled={busy || !!chat.temporary} onClick={() => {
+            setPrompt('')
+            changeChat({ action: 'temporary' })
+          }}>New temporary chat</button>
+        </div>
       </div>
-      {!!chat.saved?.length && (
+      {chat.temporary && <p className="mt-3 muted">Temporary chat. DeskAgent keeps these messages in memory until you leave the chat or quit.</p>}
+      {!!(chat.saved?.length || chat.archived?.length) && (
+        <div className="mt-4 flex gap-3">
+          <button type="button" aria-pressed={!showArchived} disabled={busy}
+            onClick={() => { setShowArchived(false); setMatches(undefined) }}>Recent chats</button>
+          <button type="button" aria-pressed={showArchived} disabled={busy}
+            onClick={() => { setShowArchived(true); setMatches(undefined) }}>Archived chats</button>
+        </div>
+      )}
+      {!!(showArchived ? chat.archived?.length : chat.saved?.length) && (
         <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={search}>
           <label className="grid gap-2">
             Search saved chats
@@ -85,15 +116,51 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
         </form>
       )}
       {matches && !matches.length && <p className="mt-3 muted" role="status">No chats matched the search.</p>}
-      {!!chat.saved?.length && (
+      {!!visibleChats.length && (
         <label className="mt-4 grid gap-2">
-          Recent chats
-          <select className="rounded border bg-transparent p-2" value={(matches ?? chat.saved).some(({ id }) => id === chat.conversation) ? chat.conversation : ''} disabled={busy}
-            onChange={(event) => { const id = event.target.value; void run('open', () => bridge.openChat(id)) }}>
+          {showArchived ? 'Archived conversation' : 'Saved conversation'}
+          <select className="rounded border bg-transparent p-2"
+            value={visibleChats.some(({ id }) => id === chat.conversation) ? chat.conversation : ''} disabled={busy}
+            onChange={(event) => {
+              const id = event.target.value
+              if (!mayLeaveTemporary()) return
+              if (chat.temporary) setPrompt('')
+              void run('open', () => bridge.openChat(id))
+            }}>
             <option value="" disabled>Choose a saved chat</option>
-            {(matches ?? chat.saved).map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+            {visibleChats.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
           </select>
         </label>
+      )}
+      {showArchived && !matches && !chat.archived?.length && <p className="mt-3 muted">No archived chats.</p>}
+      {chat.conversation && chat.activeChat && (
+        <div className="mt-4">
+          <p className="font-semibold">{chat.activeChat.title}</p>
+          {rename !== undefined ? (
+            <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(event) => {
+              event.preventDefault()
+              if (chat.conversation && rename.trim()) changeChat({ action: 'rename', id: chat.conversation, title: rename })
+            }}>
+              <label className="grid gap-2">Conversation title
+                <input maxLength={160} value={rename} className="rounded border bg-transparent p-2"
+                  onChange={(event) => setRename(event.target.value)} />
+              </label>
+              <button type="submit" disabled={busy || !rename.trim()}>Save title</button>
+              <button type="button" onClick={() => setRename(undefined)}>Cancel</button>
+            </form>
+          ) : <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" disabled={busy} onClick={() => setRename(chat.activeChat?.title)}>Rename</button>
+            <button type="button" disabled={busy} onClick={() => {
+              if (chat.conversation) changeChat({ action: chat.activeChat?.archived ? 'restore' : 'archive', id: chat.conversation })
+            }}>{chat.activeChat.archived ? 'Restore' : 'Archive'}</button>
+            <button type="button" disabled={busy} onClick={() => {
+              if (chat.conversation && window.confirm('Delete this saved conversation and its messages?')) {
+                changeChat({ action: 'delete', id: chat.conversation })
+              }
+            }}>Delete</button>
+          </div>}
+          {chat.activeChat.archived && <p className="mt-3 muted">Restore this conversation to send a message.</p>}
+        </div>
       )}
       {chat.conversation && <div className="mt-4 flex flex-wrap gap-3">
         <button type="button" disabled={busy || exporting} onClick={() => { void exportConversation('md') }}>Export Markdown</button>
@@ -132,10 +199,10 @@ export function ChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
       <form className="mt-5 grid gap-3" onSubmit={send}>
         <label htmlFor="chat-prompt">Message</label>
         <textarea id="chat-prompt" rows={4} className="w-full rounded border bg-transparent p-3"
-          disabled={busy || !selected} value={prompt} maxLength={maxPromptLength}
+          disabled={busy || chat.activeChat?.archived || !selected} value={prompt} maxLength={maxPromptLength}
           onChange={(event) => setPrompt(event.target.value)} />
         <div className="flex gap-3">
-          <button type="submit" disabled={busy || !selected || !prompt.trim()}>Send</button>
+          <button type="submit" disabled={busy || chat.activeChat?.archived || !selected || !prompt.trim()}>Send</button>
           {(pending === 'send' || chat.turns.at(-1)?.phase === 'streaming') && (
             <button type="button" onClick={() => {
               void bridge.stopChat().catch(() => setNotice('The stop request failed.'))

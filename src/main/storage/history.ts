@@ -10,7 +10,7 @@ export class ChatHistory {
     try {
       this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000')
       const version = Number(this.db.prepare('PRAGMA user_version').get()?.user_version)
-      if (version > 1) throw new Error('Chat database was created by a newer DeskAgent version')
+      if (version > 2) throw new Error('Chat database was created by a newer DeskAgent version')
       if (version === 0) this.db.exec(`
         BEGIN;
         CREATE TABLE conversations (
@@ -26,6 +26,12 @@ export class ChatHistory {
         PRAGMA user_version = 1;
         COMMIT;
       `)
+      if (version < 2) this.db.exec(`
+        BEGIN;
+        ALTER TABLE conversations ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1));
+        PRAGMA user_version = 2;
+        COMMIT;
+      `)
       this.db.exec("UPDATE messages SET phase = 'stopped' WHERE phase = 'streaming'")
     } catch (error) {
       this.db.close()
@@ -33,20 +39,38 @@ export class ChatHistory {
     }
   }
 
-  list(account: string): SavedChat[] {
-    return this.db.prepare('SELECT id, title FROM conversations WHERE account = ? ORDER BY updated DESC, rowid DESC LIMIT 100')
-      .all(account) as SavedChat[]
+  list(account: string, archived = false): SavedChat[] {
+    return this.db.prepare('SELECT id, title FROM conversations WHERE account = ? AND archived = ? ORDER BY updated DESC, rowid DESC LIMIT 100')
+      .all(account, Number(archived)) as SavedChat[]
   }
 
-  search(account: string, query: string): SavedChat[] {
+  search(account: string, query: string, archived = false): SavedChat[] {
     return this.db.prepare(`
-      SELECT c.id, c.title FROM conversations c WHERE c.account = ? AND (
+      SELECT c.id, c.title FROM conversations c WHERE c.account = ? AND c.archived = ? AND (
         instr(lower(c.title), lower(?)) > 0 OR EXISTS (
           SELECT 1 FROM messages m WHERE m.conversation = c.id AND
           (instr(lower(m.prompt), lower(?)) > 0 OR instr(lower(m.reply), lower(?)) > 0)
         )
       ) ORDER BY c.updated DESC, c.rowid DESC LIMIT 100
-    `).all(account, query, query, query) as SavedChat[]
+    `).all(account, Number(archived), query, query, query) as SavedChat[]
+  }
+
+  details(account: string, id: string): { title: string; archived: boolean } | undefined {
+    const row = this.db.prepare('SELECT title, archived FROM conversations WHERE account = ? AND id = ?').get(account, id)
+    if (row) return { title: String(row.title), archived: row.archived === 1 }
+  }
+
+  rename(account: string, id: string, title: string): boolean {
+    return !!this.db.prepare('UPDATE conversations SET title = ? WHERE account = ? AND id = ?').run(title, account, id).changes
+  }
+
+  archive(account: string, id: string, archived: boolean): boolean {
+    return !!this.db.prepare('UPDATE conversations SET archived = ? WHERE account = ? AND id = ?')
+      .run(Number(archived), account, id).changes
+  }
+
+  delete(account: string, id: string): boolean {
+    return !!this.db.prepare('DELETE FROM conversations WHERE account = ? AND id = ?').run(account, id).changes
   }
 
   read(account: string, id: string): ChatTurn[] | undefined {
@@ -59,11 +83,11 @@ export class ChatHistory {
     this.db.exec('BEGIN IMMEDIATE')
     try {
       if (current) {
-        const changed = this.db.prepare('UPDATE conversations SET updated = ? WHERE account = ? AND id = ?').run(Date.now(), account, id)
+        const changed = this.db.prepare('UPDATE conversations SET updated = ? WHERE account = ? AND id = ? AND archived = 0').run(Date.now(), account, id)
         if (!changed.changes) throw new Error('Conversation not found')
       } else {
         const title = Array.from(prompt.replace(/\s+/g, ' ')).slice(0, 70).join('')
-        this.db.prepare('INSERT INTO conversations VALUES (?, ?, ?, ?)').run(id, account, title, Date.now())
+        this.db.prepare('INSERT INTO conversations (id, account, title, updated) VALUES (?, ?, ?, ?)').run(id, account, title, Date.now())
       }
       this.db.prepare("INSERT INTO messages (conversation, position, model, prompt, reply, phase) VALUES (?, ?, ?, ?, '', 'streaming')")
         .run(id, position, model, prompt)

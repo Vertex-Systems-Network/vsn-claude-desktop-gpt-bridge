@@ -7,6 +7,7 @@ import { accountChannels, chatChannels, runtimeChannel } from '../shared/channel
 import { maxPromptLength } from '../shared/chat'
 import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
+import { z } from 'zod'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
 
@@ -80,10 +81,16 @@ async function start() {
     }
     return chat.open(id)
   }, 1)
-  handleRequest(chatChannels.search, (query) => {
-    if (typeof query !== 'string' || query.length > 160) throw new Error('Invalid search query')
-    return chat.find(query.trim())
-  }, 1)
+  const chatChange = z.discriminatedUnion('action', [
+    z.strictObject({ action: z.literal('temporary') }),
+    z.strictObject({ action: z.literal('rename'), id: z.uuid(), title: z.string().trim().min(1).max(160) }),
+    z.strictObject({ action: z.enum(['archive', 'restore', 'delete']), id: z.uuid() }),
+  ])
+  handleRequest(chatChannels.change, (value) => chat.change(chatChange.parse(value)), 1)
+  handleRequest(chatChannels.search, (query, archived) => {
+    if (typeof query !== 'string' || query.length > 160 || typeof archived !== 'boolean') throw new Error('Invalid search query')
+    return chat.find(query.trim(), archived)
+  }, 2)
   handleRequest(chatChannels.export, async (format) => {
     if (format !== 'md' && format !== 'json') throw new Error('Invalid export format')
     const conversation = chat.exportConversation()

@@ -1,4 +1,4 @@
-import type { ChatSnapshot, SavedChat } from './chat'
+import type { ChatChange, ChatSnapshot, SavedChat } from './chat'
 import type { AccountStatus } from './account'
 import { z } from 'zod'
 
@@ -22,8 +22,9 @@ export interface DesktopBridge {
   loadChatModels(): Promise<ChatSnapshot>
   sendChat(model: string, prompt: string): Promise<ChatSnapshot>
   stopChat(): Promise<void>
-  searchChats(query: string): Promise<SavedChat[]>
+  searchChats(query: string, archived: boolean): Promise<SavedChat[]>
   exportChat(format: 'md' | 'json'): Promise<boolean>
+  changeChat(change: ChatChange): Promise<ChatSnapshot>
   openChat(id: string): Promise<ChatSnapshot>
   clearChat(): Promise<ChatSnapshot>
   getRuntimeInfo(): Promise<RuntimeInfo>
