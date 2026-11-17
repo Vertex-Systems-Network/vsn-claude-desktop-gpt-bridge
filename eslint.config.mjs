@@ -6,5 +6,5 @@ export default ts.config(
   { ignores: ['out/**', 'coverage/**'] },
   js.configs.recommended,
   ...ts.configs.recommended,
-  { files: ['tests/**/*.cjs'], languageOptions: { globals: globals.node } },
+  { files: ['tests/**/*.mjs'], languageOptions: { globals: globals.node } },
 )

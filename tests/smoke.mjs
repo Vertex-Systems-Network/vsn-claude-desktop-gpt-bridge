@@ -1,5 +1,5 @@
-const { spawnSync } = require('node:child_process')
-const electron = require('electron')
+import { spawnSync } from 'node:child_process'
+import electron from 'electron'
 
 const env = { ...process.env }
 delete env.ELECTRON_RENDERER_URL

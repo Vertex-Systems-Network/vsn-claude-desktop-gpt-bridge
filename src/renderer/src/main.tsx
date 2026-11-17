@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { Project, ProjectAttachment } from '../../shared/project'
 import type { DesktopBridge, RuntimeInfo } from '../../shared/desktop'
 import './styles.css'
+import { AccountPanel } from './AccountPanel'
+import { ProjectsPanel } from './ProjectsPanel'
+import { McpPanel } from './McpPanel'
+import { appendMcpOutput } from '../../shared/mcp-context'
+import { ChatPanel } from './ChatPanel'
 
 declare global {
   interface Window { deskAgent: DesktopBridge }
@@ -24,6 +30,11 @@ type Diagnostics = { status: 'loading' | 'error' } | { status: 'ready'; info: Ru
 function Workspace() {
   const { theme, setTheme } = useAppearance()
   const [diagnostics, setDiagnostics] = useState<Diagnostics>({ status: 'loading' })
+  const [chatSession, setChatSession] = useState(0)
+  const [prompt, setPrompt] = useState('')
+  const [attachment, setAttachment] = useState<ProjectAttachment>()
+  const [projects, setProjects] = useState<Project[]>([])
+  const [chatBusy, setChatBusy] = useState(false)
   const [requestId, setRequestId] = useState(0)
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -46,7 +57,18 @@ function Workspace() {
         </button>
       </header>
       <main className="mx-auto max-w-3xl px-7 py-14">
-        <h1 className="text-3xl font-semibold">Desktop diagnostics</h1>
+        <AccountPanel chatBusy={chatBusy} onDisconnect={() => { setAttachment(undefined); setPrompt(''); setChatSession((id) => id + 1) }} />
+        <ChatPanel key={chatSession} onBusy={setChatBusy} projects={projects} prompt={prompt} onPrompt={setPrompt} attachment={attachment} onClearAttachment={() => setAttachment(undefined)} />
+        <McpPanel chatBusy={chatBusy} onUseOutput={(tool, result) => {
+          if (chatBusy) return false
+          const next = appendMcpOutput(prompt, tool, result.text, result.truncated)
+          if (!next) return false
+          setPrompt(next)
+          document.getElementById('chat-prompt')?.focus()
+          return true
+        }} />
+        <ProjectsPanel onProjects={setProjects} onAttach={(file) => { if (!chatBusy) setAttachment(file) }} />
+        <h2 className="mt-12 text-xl font-semibold">Desktop diagnostics</h2>
         <p className="mt-3 muted">Check the connection between the desktop window and its local runtime.</p>
         <section className="mt-8 rounded-xl border p-6" aria-label="Runtime status" aria-live="polite">
           {diagnostics.status === 'loading' && <p>Checking runtime…</p>}

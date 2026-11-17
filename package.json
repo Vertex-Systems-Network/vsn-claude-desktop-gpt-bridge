@@ -13,9 +13,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test",
-    "smoke": "node tests/smoke.cjs"
+    "smoke": "node tests/smoke.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "ajv": "^8.17.1",
+    "jose": "^6.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.1.0",
@@ -36,5 +39,6 @@
     "typescript-eslint": "^8.46.0",
     "vite": "^7.2.0",
     "vitest": "^4.0.0"
-  }
+  },
+  "license": "MIT"
 }

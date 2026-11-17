@@ -1,3 +1,7 @@
+import type { McpCall, McpCallResult, McpDiscovery, McpProbe, McpProfile, McpProfileInput } from './mcp'
+import type { Project, ProjectAttachment, ProjectGitStatus, ProjectInput, ProjectListing } from './project'
+import type { ChatChange, ChatSnapshot, SavedChat } from './chat'
+import type { AccountStatus } from './account'
 import { z } from 'zod'
 
 export const runtimeInfo = z.strictObject({
@@ -9,5 +13,35 @@ export const runtimeInfo = z.strictObject({
 export type RuntimeInfo = z.infer<typeof runtimeInfo>
 
 export interface DesktopBridge {
+  getAccountStatus(): Promise<AccountStatus>
+  signIn(): Promise<AccountStatus>
+  enablePlan(): Promise<AccountStatus>
+  cancelSignIn(): Promise<AccountStatus>
+  verifyPlan(): Promise<AccountStatus>
+  refreshAccount(): Promise<AccountStatus>
+  signOut(): Promise<AccountStatus>
+  getChat(): Promise<ChatSnapshot>
+  loadChatModels(): Promise<ChatSnapshot>
+  sendChat(model: string, prompt: string, attachment?: ProjectAttachment): Promise<ChatSnapshot>
+  stopChat(): Promise<void>
+  searchChats(query: string, archived: boolean): Promise<SavedChat[]>
+  exportChat(format: 'md' | 'json'): Promise<boolean>
+  changeChat(change: ChatChange): Promise<ChatSnapshot>
+  openChat(id: string): Promise<ChatSnapshot>
+  clearChat(): Promise<ChatSnapshot>
+  grantProjectFiles(id: string): Promise<boolean>
+  revokeProjectFiles(id: string): Promise<void>
+  getProjectGitStatus(id: string): Promise<ProjectGitStatus | null>
+  listProjectFiles(id: string, parts: string[]): Promise<ProjectListing>
+  previewProjectFile(id: string, parts: string[]): Promise<string>
+  listProjects(): Promise<Project[]>
+  saveProject(input: ProjectInput): Promise<Project | null>
+  deleteProject(id: string): Promise<boolean>
+  listMcpProfiles(): Promise<McpProfile[]>
+  saveMcpProfile(profile: McpProfileInput): Promise<McpProfile>
+  removeMcpProfile(id: string): Promise<boolean>
+  chooseMcpExecutable(): Promise<string | null>
+  callMcp(call: McpCall): Promise<McpCallResult | null>
+  discoverMcp(probe: McpProbe): Promise<McpDiscovery | null>
   getRuntimeInfo(): Promise<RuntimeInfo>
 }

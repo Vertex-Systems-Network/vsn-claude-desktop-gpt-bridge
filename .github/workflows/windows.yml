@@ -7,11 +7,22 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22'
-      - run: npm install
+          node-version: '24'
+      - name: Install dependencies
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) {
+            $installExit = $LASTEXITCODE
+            $cache = npm config get cache
+            Get-ChildItem (Join-Path $cache '_logs') -Filter '*debug*.log' |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 2 |
+              ForEach-Object { Get-Content $_.FullName -Tail 90 }
+            exit $installExit
+          }
       - run: npm run check
       - run: npm run build
       - run: npm run smoke
