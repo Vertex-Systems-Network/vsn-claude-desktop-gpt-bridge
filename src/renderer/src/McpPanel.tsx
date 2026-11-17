@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { maxMcpArgumentsLength, parseMcpArguments } from '../../shared/mcp-arguments'
 import type { McpCallResult, McpDiscovery, McpProfile } from '../../shared/mcp'
 
 export function McpPanel({ chatBusy, onUseOutput }: {
@@ -14,6 +15,7 @@ export function McpPanel({ chatBusy, onUseOutput }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [tool, setTool] = useState('')
+  const [argumentError, setArgumentError] = useState('')
   const [toolArgs, setToolArgs] = useState('{}')
   const [toolResult, setToolResult] = useState<McpCallResult>()
   const [result, setResult] = useState<McpDiscovery>()
@@ -102,9 +104,30 @@ export function McpPanel({ chatBusy, onUseOutput }: {
 
   const selectedTool = result?.tools.find(({ name }) => name === tool)
 
+  function checkArguments() {
+    try {
+      const parsed = parseMcpArguments(toolArgs)
+      setArgumentError('')
+      return parsed
+    } catch (failure) {
+      setArgumentError(failure instanceof Error ? failure.message : 'Invalid tool arguments.')
+    }
+  }
+
+  function formatArguments() {
+    const parsed = checkArguments()
+    if (!parsed) return
+    const formatted = JSON.stringify(parsed, null, 2)
+    if (formatted.length > maxMcpArgumentsLength) {
+      setArgumentError('Formatted arguments exceed 8,000 characters. The original text is still in the editor.')
+      return
+    }
+    setToolArgs(formatted)
+  }
+
   async function callTool() {
     const values = argumentsList()
-    if (!values || !tool || !result?.tools.some(({ name }) => name === tool) || busy) return
+    if (!values || !tool || !result?.tools.some(({ name }) => name === tool) || busy || !checkArguments()) return
     setBusy(true)
     setError('')
     setToolResult(undefined)
@@ -163,7 +186,7 @@ export function McpPanel({ chatBusy, onUseOutput }: {
       {!!result?.tools.length && <div className="grid gap-3 rounded border p-4">
         <label className="grid gap-2">Tool
           <select className="rounded border bg-transparent p-2" disabled={busy} value={tool}
-            onChange={(event) => { setTool(event.target.value); setToolResult(undefined) }}>
+            onChange={(event) => { setTool(event.target.value); setToolResult(undefined); setArgumentError('') }}>
             <option value="">Select a tool</option>
             {result.tools.map(({ name }, index) => <option key={index} value={name}>{name}</option>)}
           </select>
@@ -175,11 +198,15 @@ export function McpPanel({ chatBusy, onUseOutput }: {
           ) : <p className="mt-2 muted">This schema is too large to display. DeskAgent still checks the arguments before execution.</p>}
         </details>}
         <label className="grid gap-2">Tool arguments (JSON object)
-          <textarea className="rounded border bg-transparent p-2" rows={3} value={toolArgs} maxLength={8000}
-            disabled={busy} onChange={(event) => setToolArgs(event.target.value)} />
+          <textarea className="rounded border bg-transparent p-2" rows={3} value={toolArgs} maxLength={maxMcpArgumentsLength}
+            aria-invalid={Boolean(argumentError)} aria-describedby={argumentError ? 'mcp-arguments-error' : undefined}
+            disabled={busy} onChange={(event) => { setToolArgs(event.target.value); setArgumentError('') }} />
         </label>
-        <button type="button" className="justify-self-start" disabled={busy || !tool}
-          onClick={() => { void callTool() }}>Run tool</button>
+        {argumentError && <p id="mcp-arguments-error" role="alert">{argumentError}</p>}
+        <div className="flex flex-wrap gap-3">
+          <button type="button" disabled={busy || !tool} onClick={formatArguments}>Format JSON</button>
+          <button type="button" disabled={busy || !tool} onClick={() => { void callTool() }}>Run tool</button>
+        </div>
         {toolResult && <div className="grid gap-2" aria-live="polite">
           <strong>{toolResult.failed ? 'Tool reported an error' : 'Tool output'}</strong>
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all">{toolResult.text}</pre>

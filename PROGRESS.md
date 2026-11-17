@@ -17,3 +17,5 @@ Phase 5 started with the Projects panel, local SQLite project CRUD, native folde
 Phase 6 starts with a user-approved, one-shot local stdio MCP discovery panel. It shows tool names and descriptions and closes the connection. Saved server profiles persist names locally and protect executable paths and arguments with Windows DPAPI. Manual calls can run a discovered local tool with a per-call native confirmation and schema-checked JSON arguments. The user can add successful text output to an editable chat draft and send it explicitly. Remote transports and model-initiated tool calls remain pending.
 
 The local MCP panel displays the selected tool’s advertised JSON input schema before manual execution. Larger schemas are still validated at call time.
+
+The manual MCP argument editor now checks JSON shape before opening the confirmation and offers optional formatting. The main process still validates inputs before execution.

@@ -12,6 +12,7 @@ import { ChatService } from './inference/chat'
 import { z } from 'zod'
 import { McpProfiles } from './mcp/profiles'
 import { callMcpTool, discoverMcpTools, resolveMcpExecutable } from './mcp/discovery'
+import { maxMcpArgumentsLength, parseMcpArguments } from '../shared/mcp-arguments'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
 
@@ -292,11 +293,11 @@ async function start() {
       return await discoverMcpTools({ executable, args: config.args })
     } finally { mcpBusy = false }
   }, 1)
-  const mcpCall = mcpProbe.extend({ tool: z.string().min(1).max(128), argumentsJson: z.string().max(8_000) })
+  const mcpCall = mcpProbe.extend({ tool: z.string().min(1).max(128), argumentsJson: z.string().max(maxMcpArgumentsLength) })
   handleRequest(mcpChannels.call, async (value) => {
     if (!mainWindow || mcpBusy || smoke) return null
     const config = mcpCall.parse(value)
-    const args = z.record(z.string(), z.unknown()).parse(JSON.parse(config.argumentsJson))
+    const args = parseMcpArguments(config.argumentsJson)
     mcpBusy = true
     try {
       const executable = await resolveMcpExecutable(config.executable)
