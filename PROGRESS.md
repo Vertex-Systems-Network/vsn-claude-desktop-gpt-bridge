@@ -13,3 +13,5 @@ The account panel can request the live visible-model list and verify plan access
 Phase 4 adds versioned local SQLite history, recent-chat selection, account scoping, and recovery of interrupted replies. Local text search and Markdown/JSON export are implemented. Saved chats can be renamed, archived, restored or deleted. Temporary chats skip SQLite writes and are cleared on exit.
 
 Phase 5 started with the Projects panel, local SQLite project CRUD, native folder selection, and persisted instructions. Conversation-level project selection now persists locally and includes the current instructions on send. Projects now have session-based read-only folder grants, folder navigation, and local text previews. A user can attach one supported text file from a granted project folder. The current file content is read when sending and used for that request only.
+
+Phase 6 starts with a user-approved, one-shot local stdio MCP discovery panel. It shows tool names and descriptions and closes the connection. Tool calls, persisted connections and chat integration are pending.

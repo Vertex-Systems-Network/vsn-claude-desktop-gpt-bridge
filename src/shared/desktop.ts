@@ -1,3 +1,4 @@
+import type { McpDiscovery, McpProbe } from './mcp'
 import type { Project, ProjectAttachment, ProjectInput, ProjectListing } from './project'
 import type { ChatChange, ChatSnapshot, SavedChat } from './chat'
 import type { AccountStatus } from './account'
@@ -35,5 +36,7 @@ export interface DesktopBridge {
   listProjects(): Promise<Project[]>
   saveProject(input: ProjectInput): Promise<Project | null>
   deleteProject(id: string): Promise<boolean>
+  chooseMcpExecutable(): Promise<string | null>
+  discoverMcp(probe: McpProbe): Promise<McpDiscovery | null>
   getRuntimeInfo(): Promise<RuntimeInfo>
 }

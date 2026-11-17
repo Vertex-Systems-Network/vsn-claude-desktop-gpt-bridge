@@ -3,13 +3,14 @@ import { realpath, stat, writeFile } from 'node:fs/promises'
 import { formatChatExport } from './storage/export'
 import { isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { accountChannels, chatChannels, projectChannels, runtimeChannel } from '../shared/channel'
+import { accountChannels, chatChannels, mcpChannels, projectChannels, runtimeChannel } from '../shared/channel'
 import { maxPromptLength } from '../shared/chat'
 import { listProjectFiles, previewProjectFile } from './projects/files'
 import { Projects } from './storage/projects'
 import { ChatHistory } from './storage/history'
 import { ChatService } from './inference/chat'
 import { z } from 'zod'
+import { discoverMcpTools, resolveMcpExecutable } from './mcp/discovery'
 import { runtimeInfo } from '../shared/desktop'
 import { decryptCredential, encryptCredential } from './auth/credential-protection'
 
@@ -228,6 +229,35 @@ async function start() {
     }
     return chat.send(model, prompt.trim(), { name: value.parts.join('/'), text })
   }, 3)
+  let discoveryBusy = false
+  handleRequest(mcpChannels.choose, async () => {
+    if (!mainWindow || smoke) return null
+    const selection = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose a local MCP server executable', properties: ['openFile'],
+      filters: [{ name: 'Windows executable', extensions: ['exe'] }],
+    })
+    return selection.canceled || !selection.filePaths[0] ? null : resolveMcpExecutable(selection.filePaths[0])
+  })
+  const mcpProbe = z.strictObject({
+    executable: z.string().min(1).max(32767),
+    args: z.array(z.string().max(1024).refine((value) => !value.includes('\0'))).max(20),
+  })
+  handleRequest(mcpChannels.discover, async (value) => {
+    if (!mainWindow || discoveryBusy || smoke) return null
+    const config = mcpProbe.parse(value)
+    discoveryBusy = true
+    try {
+      const executable = await resolveMcpExecutable(config.executable)
+      const approval = await dialog.showMessageBox(mainWindow, {
+        type: 'warning', buttons: ['Run once', 'Cancel'], defaultId: 1, cancelId: 1,
+        message: 'Run this local program to discover its MCP tools?',
+        detail: 'It runs with your Windows user permissions. Only run software you trust.\n\n' +
+          JSON.stringify({ executable, args: config.args }, null, 2),
+      })
+      if (approval.response !== 0 || !mainWindow) return null
+      return await discoverMcpTools({ executable, args: config.args })
+    } finally { discoveryBusy = false }
+  }, 1)
   handleRequest(accountChannels.status, () => account.getStatus())
   handleRequest(accountChannels.signIn, () => chat.busy ? account.getStatus() : account.signIn(false))
   handleRequest(accountChannels.consent, () => chat.busy ? account.getStatus() : account.signIn(true))
@@ -257,7 +287,7 @@ async function start() {
         const projects = await window.deskAgent.listProjects();
         const chat = await window.deskAgent.loadChatModels();
         return projects.length === 0 && !!document.querySelector('#projects-heading') && chat.models.length === 0 && chat.error.includes('CHAT_AUTH_REQUIRED') &&
-          !!document.querySelector('#chat-prompt') && info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
+          !!document.querySelector('#mcp-heading') && !!document.querySelector('#chat-prompt') && info.platform === 'win32' && account.state === 'SIGNED_OUT' &&
           Object.keys(account).every((key) => ['state', 'busy', 'canRefresh', 'verifiedModel', 'label', 'message', 'code'].includes(key)) &&
           typeof require === 'undefined' && typeof process === 'undefined' &&
           document.title === 'DeskAgent' && !!document.querySelector('main h1');

@@ -7,6 +7,7 @@ import type { DesktopBridge, RuntimeInfo } from '../../shared/desktop'
 import './styles.css'
 import { AccountPanel } from './AccountPanel'
 import { ProjectsPanel } from './ProjectsPanel'
+import { McpPanel } from './McpPanel'
 import { ChatPanel } from './ChatPanel'
 
 declare global {
@@ -56,6 +57,7 @@ function Workspace() {
       <main className="mx-auto max-w-3xl px-7 py-14">
         <AccountPanel chatBusy={chatBusy} onDisconnect={() => { setAttachment(undefined); setChatSession((id) => id + 1) }} />
         <ChatPanel key={chatSession} onBusy={setChatBusy} projects={projects} attachment={attachment} onClearAttachment={() => setAttachment(undefined)} />
+        <McpPanel />
         <ProjectsPanel onProjects={setProjects} onAttach={(file) => { if (!chatBusy) setAttachment(file) }} />
         <h2 className="mt-12 text-xl font-semibold">Desktop diagnostics</h2>
         <p className="mt-3 muted">Check the connection between the desktop window and its local runtime.</p>
